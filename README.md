@@ -51,9 +51,16 @@ Paste that URL into your browser and explore the different combinations. For an 
 
 You can also use the client-side version by simply opening `subset-client.html` in your browser. It loads `samples-1680.jsonl` directly and performs the filtering with JavaScript, so no Python server is required.
 
+### Category analysis
+To compare how frequently each category appears and which combinations are most common, run
+```
+python category_analysis.py
+```
+This prints the counts for each individual category, shows a bar chart of those counts, and renders a heatmap of pairwise co-occurrences.
+
 ## What is EW's technology stack?
 
-These are two self-contained python scripts that mostly use standard libraries like `json`.  The visualizer uses `matplotlib.pyplot` and `seaborn`, and the subset generator uses Flask to generate results and a little bit of Javascript for bulk setting of radio buttons.
+These are two self-contained python scripts that mostly use standard libraries like `json`.  The visualizer uses `matplotlib.pyplot` and `seaborn`, and the subset generator uses Flask to generate results and a little bit of JavaScript for bulk setting of radio buttons.
 
 ## Roadmap/wishlist
 

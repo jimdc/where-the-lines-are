@@ -9,7 +9,7 @@ app = Flask(__name__)
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    data = {}  # Initialize as an empty dictionary
+    data = {}  # Will hold each parsed JSON object
     checkbox_label_mapping = {
         'S': 'sexual (S)',
         'H': 'hate (H)',
