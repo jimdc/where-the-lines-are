@@ -15,8 +15,23 @@
             word-wrap: break-word;
         }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Pin Chart.js to a version compatible with the matrix plugin -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@1.2.0/dist/chartjs-chart-matrix.min.js"></script>
+    <script>
+    // Register the matrix plugin explicitly and log the loaded versions
+    console.log('Chart.js version:', Chart && Chart.version);
+    if (window.ChartMatrix && Chart.register) {
+        try {
+            Chart.register(ChartMatrix.MatrixController, ChartMatrix.MatrixElement);
+            console.log('ChartMatrix plugin registered');
+        } catch (err) {
+            console.error('Failed to register ChartMatrix plugin:', err);
+        }
+    } else {
+        console.error('ChartMatrix plugin not found');
+    }
+    </script>
 </head>
 <body>
 <h1>Explore-wrongthink</h1>
@@ -180,7 +195,7 @@ function countCombinations(data) {
 function drawSingleCategoryChart(counts) {
     const labels = KEYS;
     const values = labels.map(k => counts[k] || 0);
-    new Chart(document.getElementById('singleChart'), {
+    return new Chart(document.getElementById('singleChart'), {
         type: 'bar',
         data: {
             labels: labels,
@@ -214,7 +229,7 @@ function drawPairwiseHeatmap(pairCounts) {
         }
     }
     const ctx = document.getElementById('pairwiseChart').getContext('2d');
-    new Chart(ctx, {
+    return new Chart(ctx, {
         type: 'matrix',
         data: { datasets: [{
             label: 'Pairs',
@@ -252,7 +267,7 @@ function drawCombinationChart(combos) {
     const sorted = Object.entries(combos).sort((a, b) => b[1] - a[1]);
     const labels = sorted.map(x => x[0]);
     const values = sorted.map(x => x[1]);
-    new Chart(document.getElementById('comboChart'), {
+    return new Chart(document.getElementById('comboChart'), {
         type: 'bar',
         data: {
             labels: labels,
@@ -272,9 +287,21 @@ function drawCombinationChart(combos) {
 const singleCounts = countSingleCategories(dataset);
 const pairCounts = countPairwise(dataset);
 const comboCounts = countCombinations(dataset);
-drawSingleCategoryChart(singleCounts);
-drawPairwiseHeatmap(pairCounts);
-drawCombinationChart(comboCounts);
+function safeExecute(name, fn) {
+    try {
+        return fn();
+    } catch (err) {
+        console.error(`Failed to render ${name}:`, err);
+        const div = document.createElement('div');
+        div.style.color = 'red';
+        div.textContent = `Error rendering ${name}: ${err.message || err}`;
+        document.body.appendChild(div);
+    }
+}
+
+safeExecute('single category chart', () => drawSingleCategoryChart(singleCounts));
+safeExecute('pairwise heatmap', () => drawPairwiseHeatmap(pairCounts));
+safeExecute('combination chart', () => drawCombinationChart(comboCounts));
 </script>
 </body>
 </html>
