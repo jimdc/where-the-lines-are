@@ -13,7 +13,23 @@ function handleError(err) {
 }
 
 if (location.protocol === 'file:') {
-  handleError(new Error('Cannot fetch dataset.json when using file:// protocol'));
+  appendLoadingDebug('Step 4/5: Loading dataset.js');
+  const script = document.createElement('script');
+  script.src = 'dataset.js';
+  script.onload = () => {
+    if (typeof window.appendLoadingDebug === 'function') {
+      const len = Array.isArray(dataset) ? dataset.length : '?';
+      appendLoadingDebug('Step 5/5: dataset.js loaded, length ' + len);
+    }
+    window.dataset = dataset;
+    if (typeof window.datasetResolve === 'function') {
+      window.datasetResolve();
+    }
+  };
+  script.onerror = err => {
+    handleError(err);
+  };
+  document.head.appendChild(script);
 } else {
   appendLoadingDebug('Step 4/5: Fetching dataset.json');
   fetch('dataset.json')
