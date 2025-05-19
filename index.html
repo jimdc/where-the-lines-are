@@ -316,11 +316,29 @@ const KEYS = CATEGORY_KEYS;
 
 const datasetPromise = new Promise((resolve, reject) => {
     const script = document.createElement('script');
+    const loading = document.getElementById('loading');
+    if (loading) loading.textContent = 'Fetching dataset...';
     script.src = 'dataset.js';
-    script.onload = () => resolve();
+    script.onload = () => {
+        console.log('dataset.js loaded');
+        if (typeof dataset === 'undefined') {
+            reject(new Error('dataset variable missing after load'));
+            return;
+        }
+        resolve();
+    };
     script.onerror = () => reject(new Error('Failed to load dataset.js'));
     document.head.appendChild(script);
 });
+
+setTimeout(() => {
+    if (typeof dataset === 'undefined') {
+        const loading = document.getElementById('loading');
+        if (loading && loading.textContent.includes('Fetching')) {
+            loading.textContent += ' (still loading, check console)';
+        }
+    }
+}, 5000);
 
 function gloss(key) {
     return checkboxLabelMapping[key] || key;
@@ -695,18 +713,23 @@ let lastWordCounts = {};
 const MIN_WORD_FREQ = 3;
 
 datasetPromise.then(() => {
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('charts').style.display = 'block';
-    buildDynamicStopWords(dataset);
-    const singleCounts = countSingleCategories(dataset);
-    const pairCounts = countPairwise(dataset);
-    window.SUGGESTIONS = buildSuggestions(pairCounts);
-    const comboCounts = countCombinations(dataset);
-    showCounts(singleCounts, pairCounts);
-    safeExecute('single category chart', () => { singleChart = drawSingleCategoryChart(singleCounts); });
-    safeExecute('pairwise heatmap', () => drawPairwiseHeatmap(pairCounts));
-    safeExecute('combination chart', () => drawCombinationChart(comboCounts));
-    generateSubset();
+    const loading = document.getElementById('loading');
+    if (loading) loading.textContent = `Processing ${Array.isArray(dataset) ? dataset.length : '?'} prompts...`;
+    // allow DOM update before heavy work
+    setTimeout(() => {
+        if (loading) loading.style.display = 'none';
+        document.getElementById('charts').style.display = 'block';
+        buildDynamicStopWords(dataset);
+        const singleCounts = countSingleCategories(dataset);
+        const pairCounts = countPairwise(dataset);
+        window.SUGGESTIONS = buildSuggestions(pairCounts);
+        const comboCounts = countCombinations(dataset);
+        showCounts(singleCounts, pairCounts);
+        safeExecute('single category chart', () => { singleChart = drawSingleCategoryChart(singleCounts); });
+        safeExecute('pairwise heatmap', () => drawPairwiseHeatmap(pairCounts));
+        safeExecute('combination chart', () => drawCombinationChart(comboCounts));
+        generateSubset();
+    }, 10);
 }).catch(err => {
     const loading = document.getElementById('loading');
     if (loading) loading.textContent = 'Error loading dataset: ' + (err.message || err);
