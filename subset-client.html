@@ -25,6 +25,7 @@
     </script>
 </head>
 <body>
+<div id="loading"><div class="spinner"></div>Loading dataset...</div>
 <div class="container my-4">
 <h1>Explore-wrongthink</h1>
 <form id="filterForm" class="mb-4">
@@ -61,6 +62,7 @@
 </tbody>
 </table>
 </div>
+<div id="charts" style="display:none">
 <h2>Single category counts</h2>
 <canvas id="singleChart"></canvas>
 <h2>Pairwise co-occurrences</h2>
@@ -69,6 +71,7 @@
 <canvas id="comboChart"></canvas>
 <h2>Word Cloud</h2>
 <canvas id="wordCloud"></canvas>
+</div>
 <script src="dataset.js"></script>
 <script>
 const checkboxLabelMapping = {
