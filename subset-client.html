@@ -3,31 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <title>Explore-wrongthink</title>
-    <style>
-        h1, h2 {
-            text-align: center;
-        }
-        table {
-            width: 100%;
-            table-layout: fixed;
-        }
-        th, td {
-            word-wrap: break-word;
-        }
-    </style>
-    <style>
-        #loading { text-align: center; margin: 20px; }
-        .spinner {
-            border: 8px solid #f3f3f3;
-            border-top: 8px solid #3498db;
-            border-radius: 50%;
-            width: 60px;
-            height: 60px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 10px;
-        }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    </style>
+    <meta name="theme-color" content="#000000">
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="styles.css">
     <!-- Pin Chart.js to a version compatible with the matrix plugin -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@1.2.0/dist/chartjs-chart-matrix.min.js"></script>
@@ -398,6 +376,13 @@ datasetPromise.then(() => {
     if (loading) loading.textContent = 'Error loading dataset: ' + (err.message || err);
     console.error('Failed to load dataset.js', err);
 });
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js');
+  });
+}
 </script>
 </body>
 </html>
