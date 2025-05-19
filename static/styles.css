@@ -51,13 +51,9 @@ mark {
     to { transform: rotate(360deg); }
 }
 #wordCloud {
-    width: 100%;
-    height: 600px;
-}
-@media (min-width: 768px) {
-    #wordCloud {
-        height: 800px;
-    }
+    width: 500px;
+    height: 500px;
+    max-width: 100%;
 }
 #wordTooltip {
     position: absolute;
