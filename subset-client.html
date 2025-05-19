@@ -150,6 +150,10 @@ buildFilterTable();
 
 const KEYS = Object.keys(checkboxLabelMapping);
 
+function gloss(key) {
+    return checkboxLabelMapping[key] || key;
+}
+
 function countSingleCategories(data) {
     const counts = {};
     KEYS.forEach(k => counts[k] = 0);
@@ -209,7 +213,15 @@ function drawSingleCategoryChart(counts) {
             scales: {
                 y: { beginAtZero: true }
             },
-            plugins: { legend: { display: false } }
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: items => gloss(items[0].label),
+                        label: ctx => `Count: ${ctx.parsed.y}`
+                    }
+                }
+            }
         }
     });
 }
@@ -259,7 +271,7 @@ function drawPairwiseHeatmap(pairCounts) {
                     callbacks: {
                         title: items => {
                             const d = items[0].raw;
-                            return `${KEYS[d.y]} + ${KEYS[d.x]}`;
+                            return `${gloss(KEYS[d.y])} + ${gloss(KEYS[d.x])}`;
                         },
                         label: item => `Count: ${item.raw.v}`
                     }
@@ -285,7 +297,18 @@ function drawCombinationChart(combos) {
         },
         options: {
             scales: { x: { ticks: { autoSkip: false } }, y: { beginAtZero: true } },
-            plugins: { legend: { display: false } }
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: items => items[0].label
+                            .split('+')
+                            .map(gloss)
+                            .join(' + '),
+                        label: ctx => `Frequency: ${ctx.parsed.y}`
+                    }
+                }
+            }
         }
     });
 }
