@@ -2,9 +2,9 @@
 
 ## What is Explore-wrongthink?
 
-Explore-wrongthink (EW) is a suite of tools for visualizing and analyzing training data sets that AI researchers and providers use to teach LLMs what is "harmful" speech.
+Explore-wrongthink (EW) is a toolset for visualizing and analyzing prompt-classification datasets used in language model safety research.
 
-Of course, terms like "harm" and "safety" are vague, so EW allows you to examine specific prompt examples that fit zero or more of eight categories:
+It allows users to examine prompt examples that fall into zero or more of eight categories:
 
 | Category | Label | Definition |
 | -------- | ----- | ---------- |
