@@ -63,7 +63,7 @@
 <canvas id="wordCloud" class="mb-4"></canvas>
 <div class="mb-3">
   <label for="zoomRange" class="form-label">Zoom</label>
-  <input type="range" class="form-range" id="zoomRange" min="50" max="200" value="100">
+  <input type="range" class="form-range" id="zoomRange" min="10" max="200" value="100">
 </div>
 <div id="wordTooltip"></div>
 <form id="filterForm" class="mb-4">
@@ -711,16 +711,18 @@ function renderWordCloud(counts) {
     const tooltip = document.getElementById('wordTooltip');
     if (canvas) {
         const rect = canvas.getBoundingClientRect();
-        canvas.width = rect.width;
-        canvas.height = rect.height;
+        canvas.width = rect.width * WORD_CLOUD_SCALE;
+        canvas.height = rect.height * WORD_CLOUD_SCALE;
+        canvas.style.width = rect.width + 'px';
+        canvas.style.height = rect.height + 'px';
     }
     const list = Object.entries(counts)
         .filter(([w, c]) => c >= MIN_WORD_FREQ)
         .sort((a, b) => b[1] - a[1]);
     WordCloud(canvas, {
         list,
-        weightFactor: s => Math.pow(s, 1.3) * currentZoom,
-        gridSize: Math.round(8 * currentZoom),
+        weightFactor: s => Math.pow(s, 1.3) * currentZoom * BASE_WEIGHT_SCALE,
+        gridSize: Math.max(1, Math.round(4 * currentZoom)),
         backgroundColor: '#fff',
         color: 'random-dark',
         hover: (item, dimension, evt) => {
@@ -761,6 +763,8 @@ let singleChart;
 let currentZoom = 1;
 let lastWordCounts = {};
 const MIN_WORD_FREQ = 3;
+const BASE_WEIGHT_SCALE = 0.25; // reduce word sizes overall
+const WORD_CLOUD_SCALE = 2;     // enlarge canvas area for layout
 
 datasetPromise.then(() => {
     const container = document.querySelector('.container.my-4');
