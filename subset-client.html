@@ -28,6 +28,13 @@
 <div id="loading"><div class="spinner"></div>Loading dataset...</div>
 <div class="container my-4">
 <h1>Explore-wrongthink</h1>
+<input type="text" id="searchQuery" class="form-control mb-3" placeholder="Search prompts…">
+<h2>Word Cloud</h2>
+<div class="mb-2">
+  <label for="wordCategorySelect" class="form-label">Word Cloud Category</label>
+  <select id="wordCategorySelect" class="form-select form-select-sm w-auto"></select>
+</div>
+<canvas id="wordCloud" class="mb-4"></canvas>
 <form id="filterForm" class="mb-4">
 <div class="table-responsive">
 <table class="table table-bordered table-sm">
@@ -64,12 +71,6 @@
 <canvas id="pairwiseChart"></canvas>
 <h2>Key combination frequencies</h2>
 <canvas id="comboChart"></canvas>
-<h2>Word Cloud</h2>
-<div class="mb-2">
-  <label for="wordCategorySelect" class="form-label">Word Cloud Category</label>
-  <select id="wordCategorySelect" class="form-select form-select-sm w-auto"></select>
-</div>
-<canvas id="wordCloud"></canvas>
 </div>
 <script>
 const checkboxLabelMapping = {
@@ -172,6 +173,7 @@ function generateSubset(event) {
     if (event) {
         event.preventDefault();
     }
+    const query = document.getElementById('searchQuery').value.trim().toLowerCase();
     const values = {};
     checkboxes.forEach(cb => {
         const el = document.getElementById(`tri-${cb}`);
@@ -179,13 +181,14 @@ function generateSubset(event) {
     });
     updateSuggestionDisplay(values);
     const results = dataset.filter(row => {
-        return checkboxes.every(key => {
+        const match = checkboxes.every(key => {
             const rowValue = getRowValue(row, key);
             const selected = values[key];
             if (selected === 'Include') return rowValue === '1';
             if (selected === 'Exclude') return rowValue === '0';
             return true; // Any
         });
+        return match && (query === '' || (row.prompt && row.prompt.toLowerCase().includes(query)));
     }).map(row => {
         const keys0 = [];
         const keys1 = [];
@@ -219,6 +222,7 @@ function generateSubset(event) {
 document.getElementById('filterForm').addEventListener('submit', generateSubset);
 buildFilterTable();
 document.getElementById('filterForm').addEventListener('change', generateSubset);
+document.getElementById('searchQuery').addEventListener('input', generateSubset);
 
 const KEYS = CATEGORY_KEYS;
 
@@ -541,7 +545,20 @@ function precomputeWordCountsByCategory(data) {
 function updateWordCloudForCategory(cat) {
     const counts = precomputedWordCounts[cat] || {};
     const list = Object.entries(counts);
-    WordCloud(document.getElementById('wordCloud'), { list, weightFactor: 2, gridSize: 8, backgroundColor: '#fff', color: 'random-dark' });
+    WordCloud(document.getElementById('wordCloud'), {
+        list,
+        weightFactor: 2,
+        gridSize: 8,
+        backgroundColor: '#fff',
+        color: 'random-dark',
+        click: item => {
+            const search = document.getElementById('searchQuery');
+            if (search && item && item[0]) {
+                search.value = item[0];
+                generateSubset();
+            }
+        }
+    });
 }
 
 function buildWordCloudSelector() {

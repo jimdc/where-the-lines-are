@@ -32,7 +32,7 @@ First convert the moderation dataset to `dataset.js`:
 ```
 python scripts/jsonl_to_js.py --input samples-1680.jsonl --output dataset.js
 ```
-Then open `subset-client.html` in your web browser. Select your desired values—results update automatically whenever you change a classification option. For example, an input of "V" (violence) + "SH" (self-harm) parameters as 1, with all others being 0, gives two prompts:
+Then open `subset-client.html` in your web browser. Select your desired values—results update automatically whenever you change a classification option. Use the search box at the top to filter prompts by keyword. For example, an input of "V" (violence) + "SH" (self-harm) parameters as 1, with all others being 0, gives two prompts:
 
 ![Screenshot of violence+self-harm combination subset of prompts.](EW_example_V+SH.png "Results update automatically when you change classifications")
 
