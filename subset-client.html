@@ -48,6 +48,7 @@
     <tbody>
     </tbody>
 </table>
+<script src="dataset.js"></script>
 <script>
 const checkboxLabelMapping = {
     'S': 'sexual (S)',
@@ -60,7 +61,6 @@ const checkboxLabelMapping = {
     'V2': 'violence/graphic (V2)'
 };
 const checkboxes = Object.keys(checkboxLabelMapping);
-let dataset = [];
 
 function setAllRadioButtons(value) {
     document.querySelectorAll('input[type="radio"]').forEach(radio => {
@@ -84,24 +84,6 @@ function buildFilterTable() {
     });
 }
 
-function loadData() {
-    return fetch('samples-1680.jsonl')
-        .then(resp => {
-            if (!resp.ok) throw new Error('Network response was not ok');
-            return resp.text();
-        })
-        .then(text => {
-            dataset = text.trim().split('\n').map(line => JSON.parse(line));
-        })
-        .catch(err => {
-            const msg = document.createElement('div');
-            msg.style.color = 'red';
-            msg.textContent = 'Failed to load samples-1680.jsonl. ' +
-                'Try running a local HTTP server (e.g. "python3 -m http.server") and open this file via http://localhost:8000/.';
-            document.body.insertBefore(msg, document.body.firstChild);
-            console.error('Error loading data:', err);
-        });
-}
 
 function generateSubset(event) {
     event.preventDefault();
@@ -142,7 +124,6 @@ function generateSubset(event) {
 
 document.getElementById('filterForm').addEventListener('submit', generateSubset);
 buildFilterTable();
-loadData();
 </script>
 </body>
 </html>

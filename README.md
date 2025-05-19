@@ -49,7 +49,11 @@ Paste that URL into your browser and explore the different combinations. For an 
 
 ![Screenshot of violence+self-harm combination subset of prompts.](EW_example_V+SH.png "Select your desired values and click on 'Generate subset'")
 
-You can also use the client-side version. Open `subset-client.html` in your browser and it will load `samples-1680.jsonl` directly to perform the filtering with JavaScript. Some browsers block fetching local files, so if no data appears, start a simple HTTP server (e.g. run `python3 -m http.server`) and visit `http://localhost:8000/subset-client.html` instead.
+You can also use the client-side version. Run `python scripts/jsonl_to_js.py` to
+create `dataset.js`, then open `subset-client.html` in your browser. The page
+uses this generated file for filtering. Some browsers block loading local files,
+so if nothing appears, start a simple HTTP server (e.g. run `python3 -m
+http.server`) and visit `http://localhost:8000/subset-client.html` instead.
 
 ### Category analysis
 To compare how frequently each category appears and which combinations are most common, run
