@@ -337,7 +337,7 @@ const KEYS = CATEGORY_KEYS;
 const datasetPromise = new Promise((resolve, reject) => {
     console.log('Initializing dataset load');
     updateLoadingText('Fetching dataset...');
-    appendLoadingDebug('datasetPromise started');
+    appendLoadingDebug('Step 1/5: datasetPromise started');
 
     window.datasetResolve = () => {
         appendLoadingDebug('Dataset loaded');
@@ -358,7 +358,7 @@ const datasetPromise = new Promise((resolve, reject) => {
         reject(new Error('Failed to load dataset-loader.js'));
     };
     document.head.appendChild(script);
-    appendLoadingDebug('dataset-loader.js script appended');
+    appendLoadingDebug('Step 2/5: dataset-loader.js script appended');
 });
 
 let datasetLoaded = false;

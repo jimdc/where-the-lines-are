@@ -47,6 +47,7 @@ GitHub Pages to view the site. Using a regular HTTP(S) URL avoids the
 file-protocol restrictions that would otherwise keep "Loading dataset..." on the
 screen.
 
-The page also shows loading debug messages directly below the spinner. If the
-dataset fails to load, these messages will include HTTP status codes and other
-details to help diagnose the problem.
+The page also shows loading debug messages directly below the spinner. These now
+include numbered steps (1–5) describing each part of the loading process. If the
+dataset fails to load, these messages will show exactly which step failed along
+with HTTP status codes and other details to help diagnose the problem.

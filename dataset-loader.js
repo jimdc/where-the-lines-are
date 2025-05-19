@@ -1,5 +1,5 @@
 if (typeof window.appendLoadingDebug === 'function') {
-  appendLoadingDebug('dataset-loader.js executing (protocol ' + location.protocol + ')');
+  appendLoadingDebug('Step 3/5: dataset-loader.js executing (protocol ' + location.protocol + ')');
 }
 
 function handleError(err) {
@@ -15,11 +15,11 @@ function handleError(err) {
 if (location.protocol === 'file:') {
   handleError(new Error('Cannot fetch dataset.json when using file:// protocol'));
 } else {
-  appendLoadingDebug('Fetching dataset.json');
+  appendLoadingDebug('Step 4/5: Fetching dataset.json');
   fetch('dataset.json')
     .then(r => {
       if (typeof window.appendLoadingDebug === 'function') {
-        appendLoadingDebug('dataset.json HTTP status ' + r.status);
+        appendLoadingDebug('Step 4/5: dataset.json HTTP status ' + r.status);
       }
       if (!r.ok) {
         throw new Error('HTTP ' + r.status + ' ' + r.statusText);
@@ -29,7 +29,7 @@ if (location.protocol === 'file:') {
     .then(data => {
       if (typeof window.appendLoadingDebug === 'function') {
         const len = Array.isArray(data) ? data.length : '?';
-        appendLoadingDebug('dataset.json parsed, length ' + len);
+        appendLoadingDebug('Step 5/5: dataset.json parsed, length ' + len);
       }
       window.dataset = data;
       if (typeof window.datasetResolve === 'function') {
