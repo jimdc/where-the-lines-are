@@ -46,3 +46,23 @@ mark {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
 }
+#wordCloud {
+    width: 100%;
+    height: 600px;
+}
+@media (min-width: 768px) {
+    #wordCloud {
+        height: 800px;
+    }
+}
+#wordTooltip {
+    position: absolute;
+    background-color: rgba(0,0,0,0.75);
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    pointer-events: none;
+    display: none;
+    z-index: 1000;
+}
