@@ -27,18 +27,13 @@ Future versions of EW should be able to compare and contrast different datasets.
 
 ## How do I use explore-wrongthink?
 
-### Subset generator
-First convert the moderation dataset to `dataset.js`:
-```
-python scripts/jsonl_to_js.py --input samples-1680.jsonl --output dataset.js
-```
-Then open `subset-client.html` in your web browser. Select your desired values—results update automatically whenever you change a classification option. Use the search box at the top to filter prompts by keyword. For example, an input of "V" (violence) + "SH" (self-harm) parameters as 1, with all others being 0, gives two prompts:
+Open `subset-client.html` in your web browser. Select your desired values—results update automatically whenever you change a classification option. Use the search box at the top to filter prompts by keyword. For example, an input of "V" (violence) + "SH" (self-harm) parameters as 1, with all others being 0, gives two prompts:
 
 ![Screenshot of violence+self-harm combination subset of prompts.](EW_example_V+SH.png "Results update automatically when you change classifications")
 
 *(Screenshot from an older version of the UI; the interface has since changed slightly.)*
 
-The client page now includes visualizations rendered with Chart.js. After generating `dataset.js`, open the page to see bar charts of single-category counts, a heatmap of pairwise co-occurrences, and a histogram of key combinations. The chart on the left counts prompts for each single category, the heatmap in the middle shows how often pairs of categories appear together (brighter squares indicate more co-occurrences), and the histogram on the right counts how frequently each set of category keys occurs.
+The chart on the left counts prompts for each single category, the heatmap in the middle shows how often pairs of categories appear together (brighter squares indicate more co-occurrences), and the histogram on the right counts how frequently each set of category keys occurs.
 
 ![Charts of single-category counts, pairwise co-occurrences, and key combination frequencies.](category-graphs.png "Single-category counts, pairwise co-occurrences, and key combination frequencies")
 
