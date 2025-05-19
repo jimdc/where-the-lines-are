@@ -38,3 +38,8 @@ The chart on the left counts prompts for each single category, the heatmap in th
 ![Charts of single-category counts, pairwise co-occurrences, and key combination frequencies.](category-graphs.png "Single-category counts, pairwise co-occurrences, and key combination frequencies")
 
 If the charts do not appear, check the browser console for error messages.
+
+If you open `index.html` directly from your filesystem and the page is stuck on
+"Loading dataset...", your browser is blocking local file requests. Serve the
+directory with a small web server (for example `python3 -m http.server`) or use
+GitHub Pages to view the site.
