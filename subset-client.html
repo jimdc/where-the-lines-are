@@ -18,6 +18,7 @@
     <!-- Pin Chart.js to a version compatible with the matrix plugin -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@1.2.0/dist/chartjs-chart-matrix.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/wordcloud@1.1.0/src/wordcloud2.js"></script>
     <script>
     // Register the matrix plugin explicitly and log the loaded versions
     console.log('Chart.js version:', Chart && Chart.version);
@@ -71,6 +72,8 @@
 <canvas id="pairwiseChart"></canvas>
 <h2>Key combination frequencies</h2>
 <canvas id="comboChart"></canvas>
+<h2>Word Cloud</h2>
+<canvas id="wordCloud" width="800" height="400"></canvas>
 <script src="dataset.js"></script>
 <script>
 const checkboxLabelMapping = {
@@ -316,6 +319,27 @@ function drawCombinationChart(combos) {
 const singleCounts = countSingleCategories(dataset);
 const pairCounts = countPairwise(dataset);
 const comboCounts = countCombinations(dataset);
+
+function computeWordCounts(data) {
+    const stop = new Set(['the','and','to','a','of','it','in','i','that','is','on','for','with','as','are','was','this','but','be','have','has','had','or','an','my','if','me','so','im','you','we','they','he','she','them','his','her','your','their','our','us']);
+    const counts = {};
+    data.forEach(row => {
+        if (!row.prompt) return;
+        const words = row.prompt.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
+        words.forEach(w => {
+            if (w && !stop.has(w)) {
+                counts[w] = (counts[w] || 0) + 1;
+            }
+        });
+    });
+    return counts;
+}
+
+function updateWordCloudForData(data) {
+    const counts = computeWordCounts(data);
+    const list = Object.entries(counts);
+    WordCloud(document.getElementById('wordCloud'), { list, weightFactor: 2, gridSize: 8, backgroundColor: '#fff', color: 'random-dark' });
+}
 function safeExecute(name, fn) {
     try {
         return fn();
@@ -328,9 +352,35 @@ function safeExecute(name, fn) {
     }
 }
 
-safeExecute('single category chart', () => drawSingleCategoryChart(singleCounts));
+let singleChart;
+safeExecute('single category chart', () => { singleChart = drawSingleCategoryChart(singleCounts); });
 safeExecute('pairwise heatmap', () => drawPairwiseHeatmap(pairCounts));
 safeExecute('combination chart', () => drawCombinationChart(comboCounts));
+updateWordCloudForData(dataset);
+
+if (singleChart) {
+    let lastCategory = null;
+    const canvas = singleChart.canvas;
+    canvas.addEventListener('mousemove', evt => {
+        const points = singleChart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, true);
+        if (points.length) {
+            const idx = points[0].index;
+            const key = singleChart.data.labels[idx];
+            if (lastCategory !== key) {
+                lastCategory = key;
+                const subset = dataset.filter(row => row[key] === 1);
+                updateWordCloudForData(subset);
+            }
+        } else if (lastCategory !== null) {
+            lastCategory = null;
+            updateWordCloudForData(dataset);
+        }
+    });
+    canvas.addEventListener('mouseleave', () => {
+        lastCategory = null;
+        updateWordCloudForData(dataset);
+    });
+}
 </script>
 </body>
 </html>
