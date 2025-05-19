@@ -70,9 +70,12 @@
 <h2>Key combination frequencies</h2>
 <canvas id="comboChart"></canvas>
 <h2>Word Cloud</h2>
+<div class="mb-2">
+  <label for="wordCategorySelect" class="form-label">Word Cloud Category</label>
+  <select id="wordCategorySelect" class="form-select form-select-sm w-auto"></select>
+</div>
 <canvas id="wordCloud"></canvas>
 </div>
-<script src="dataset.js"></script>
 <script>
 const checkboxLabelMapping = {
     'S': 'sexual (S)',
@@ -332,14 +335,16 @@ function drawCombinationChart(combos) {
 }
 
 
+const stopWords = new Set(['the','and','to','a','of','it','in','i','that','is','on','for','with','as','are','was','this','but','be','have','has','had','or','an','my','if','me','so','im','you','we','they','he','she','them','his','her','your','their','our','us']);
+let precomputedWordCounts = {};
+
 function computeWordCounts(data) {
-    const stop = new Set(['the','and','to','a','of','it','in','i','that','is','on','for','with','as','are','was','this','but','be','have','has','had','or','an','my','if','me','so','im','you','we','they','he','she','them','his','her','your','their','our','us']);
     const counts = {};
     data.forEach(row => {
         if (!row.prompt) return;
         const words = row.prompt.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
         words.forEach(w => {
-            if (w && !stop.has(w) && !/^\d+$/.test(w)) {
+            if (w && !stopWords.has(w) && !/^\d+$/.test(w)) {
                 counts[w] = (counts[w] || 0) + 1;
             }
         });
@@ -347,10 +352,46 @@ function computeWordCounts(data) {
     return counts;
 }
 
-function updateWordCloudForData(data) {
-    const counts = computeWordCounts(data);
+function precomputeWordCountsByCategory(data) {
+    const result = { All: {} };
+    KEYS.forEach(k => result[k] = {});
+    data.forEach(row => {
+        if (!row.prompt) return;
+        const words = row.prompt.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
+        words.forEach(w => {
+            if (!w || stopWords.has(w) || /^\d+$/.test(w)) return;
+            result.All[w] = (result.All[w] || 0) + 1;
+            KEYS.forEach(k => {
+                if (row[k] === 1) {
+                    const counts = result[k];
+                    counts[w] = (counts[w] || 0) + 1;
+                }
+            });
+        });
+    });
+    return result;
+}
+
+function updateWordCloudForCategory(cat) {
+    const counts = precomputedWordCounts[cat] || {};
     const list = Object.entries(counts);
     WordCloud(document.getElementById('wordCloud'), { list, weightFactor: 2, gridSize: 8, backgroundColor: '#fff', color: 'random-dark' });
+}
+
+function buildWordCloudSelector() {
+    const sel = document.getElementById('wordCategorySelect');
+    sel.innerHTML = '';
+    const allOpt = document.createElement('option');
+    allOpt.value = 'All';
+    allOpt.textContent = 'All';
+    sel.appendChild(allOpt);
+    KEYS.forEach(k => {
+        const opt = document.createElement('option');
+        opt.value = k;
+        opt.textContent = gloss(k);
+        sel.appendChild(opt);
+    });
+    sel.addEventListener('change', () => updateWordCloudForCategory(sel.value));
 }
 function safeExecute(name, fn) {
     try {
@@ -369,13 +410,15 @@ let singleChart;
 datasetPromise.then(() => {
     document.getElementById('loading').style.display = 'none';
     document.getElementById('charts').style.display = 'block';
+    precomputedWordCounts = precomputeWordCountsByCategory(dataset);
+    buildWordCloudSelector();
     const singleCounts = countSingleCategories(dataset);
     const pairCounts = countPairwise(dataset);
     const comboCounts = countCombinations(dataset);
     safeExecute('single category chart', () => { singleChart = drawSingleCategoryChart(singleCounts); });
     safeExecute('pairwise heatmap', () => drawPairwiseHeatmap(pairCounts));
     safeExecute('combination chart', () => drawCombinationChart(comboCounts));
-    updateWordCloudForData(dataset);
+    updateWordCloudForCategory('All');
 }).catch(err => {
     const loading = document.getElementById('loading');
     if (loading) loading.textContent = 'Error loading dataset: ' + (err.message || err);
