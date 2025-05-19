@@ -33,10 +33,6 @@
 <div id="filterSummary" class="mb-3"></div>
 <h2>Word Cloud</h2>
 <p class="text-muted">Click a word to set the search bar to that term.</p>
-<div class="mb-2">
-  <label for="wordCategorySelect" class="form-label">Word Cloud Category</label>
-  <select id="wordCategorySelect" class="form-select form-select-sm w-auto"></select>
-</div>
 <canvas id="wordCloud" class="mb-4"></canvas>
 <form id="filterForm" class="mb-4">
 <div class="table-responsive">
@@ -195,7 +191,7 @@ function generateSubset(event) {
         summaryEl.textContent = summaryParts.length ? summaryParts.join(', ') : 'No filters applied';
     }
     updateSuggestionDisplay(values);
-    const results = dataset.filter(row => {
+    const subset = dataset.filter(row => {
         const match = checkboxes.every(key => {
             const rowValue = getRowValue(row, key);
             const selected = values[key];
@@ -204,7 +200,9 @@ function generateSubset(event) {
             return true; // Any
         });
         return match && (query === '' || (row.prompt && row.prompt.toLowerCase().includes(query)));
-    }).map(row => {
+    });
+
+    const results = subset.map(row => {
         const keys0 = [];
         const keys1 = [];
         const keysNA = [];
@@ -239,6 +237,9 @@ function generateSubset(event) {
         tr.appendChild(td);
         tbody.appendChild(tr);
     }
+
+    const counts = computeWordCounts(subset);
+    renderWordCloud(counts);
 }
 
 document.getElementById('filterForm').addEventListener('submit', generateSubset);
@@ -513,7 +514,6 @@ const defaultStopWords = [
   'very','into','because','also','s','t','m','d','ll','ve','re','person','organization'
 ];
 const stopWords = new Set(defaultStopWords);
-let precomputedWordCounts = {};
 
 function buildDynamicStopWords(data, topN = 50) {
     const counts = {};
@@ -544,28 +544,7 @@ function computeWordCounts(data) {
     return counts;
 }
 
-function precomputeWordCountsByCategory(data) {
-    const result = { All: {} };
-    KEYS.forEach(k => result[k] = {});
-    data.forEach(row => {
-        if (!row.prompt) return;
-        const words = row.prompt.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
-        words.forEach(w => {
-            if (!w || stopWords.has(w) || /^\d+$/.test(w)) return;
-            result.All[w] = (result.All[w] || 0) + 1;
-            KEYS.forEach(k => {
-                if (row[k] === 1) {
-                    const counts = result[k];
-                    counts[w] = (counts[w] || 0) + 1;
-                }
-            });
-        });
-    });
-    return result;
-}
-
-function updateWordCloudForCategory(cat) {
-    const counts = precomputedWordCounts[cat] || {};
+function renderWordCloud(counts) {
     const list = Object.entries(counts);
     WordCloud(document.getElementById('wordCloud'), {
         list,
@@ -583,21 +562,7 @@ function updateWordCloudForCategory(cat) {
     });
 }
 
-function buildWordCloudSelector() {
-    const sel = document.getElementById('wordCategorySelect');
-    sel.innerHTML = '';
-    const allOpt = document.createElement('option');
-    allOpt.value = 'All';
-    allOpt.textContent = 'All';
-    sel.appendChild(allOpt);
-    KEYS.forEach(k => {
-        const opt = document.createElement('option');
-        opt.value = k;
-        opt.textContent = gloss(k);
-        sel.appendChild(opt);
-    });
-    sel.addEventListener('change', () => updateWordCloudForCategory(sel.value));
-}
+
 function safeExecute(name, fn) {
     try {
         return fn();
@@ -616,8 +581,6 @@ datasetPromise.then(() => {
     document.getElementById('loading').style.display = 'none';
     document.getElementById('charts').style.display = 'block';
     buildDynamicStopWords(dataset);
-    precomputedWordCounts = precomputeWordCountsByCategory(dataset);
-    buildWordCloudSelector();
     const singleCounts = countSingleCategories(dataset);
     const pairCounts = countPairwise(dataset);
     window.SUGGESTIONS = buildSuggestions(pairCounts);
@@ -626,7 +589,6 @@ datasetPromise.then(() => {
     safeExecute('single category chart', () => { singleChart = drawSingleCategoryChart(singleCounts); });
     safeExecute('pairwise heatmap', () => drawPairwiseHeatmap(pairCounts));
     safeExecute('combination chart', () => drawCombinationChart(comboCounts));
-    updateWordCloudForCategory('All');
     generateSubset();
 }).catch(err => {
     const loading = document.getElementById('loading');
