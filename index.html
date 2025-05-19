@@ -55,38 +55,64 @@
   </table>
   </div>
 </details>
-<label for="searchQuery" class="form-label">Word Search</label>
-<input type="text" id="searchQuery" class="form-control mb-3" placeholder="Search prompts by keyword…">
-<div id="filterSummary" class="mb-3"></div>
-<h2>Word Cloud</h2>
-<p class="text-muted">Click a word to set the search bar to that term.</p>
-<canvas id="wordCloud" class="mb-4"></canvas>
-<div id="controlsRow" class="mb-4">
-  <div id="zoomBox" class="control-box">
-    <div class="zoom-control">
-      <label for="zoomRange" class="form-label">Zoom</label>
-      <input type="range" class="form-range" id="zoomRange" min="10" max="200" value="100">
+<div id="mainContent">
+  <div id="mainRow">
+    <div id="leftCol">
+      <h2>Word Cloud</h2>
+      <p class="text-muted">Click a word to set the search bar to that term.</p>
+      <div id="wordCloudSection">
+        <canvas id="wordCloud" class="mb-4"></canvas>
+      </div>
+    </div>
+    <div id="rightCol">
+      <div id="filterBox" class="control-box">
+        <form id="filterForm">
+          <div class="table-responsive">
+            <table class="table table-bordered table-sm mb-2">
+              <thead>
+                <tr>
+                  <th>Classification key</th>
+                  <th>Filter</th>
+                </tr>
+              </thead>
+              <tbody id="filterBody"></tbody>
+            </table>
+          </div>
+          <div id="pairFilters" class="my-2"></div>
+          <div id="suggestions" class="my-2"></div>
+          <button type="submit" class="btn btn-primary">Generate subset</button>
+        </form>
+        <div id="compactControlsRow">
+          <div class="wordsearch-box">
+            <label for="searchQuery" class="form-label" style="font-size:0.92em; margin-bottom:2px;">Word Search</label>
+            <input type="text" id="searchQuery" class="form-control" placeholder="Search prompts by keyword...">
+          </div>
+          <div class="zoom-box-compact">
+            <label for="zoomRange" class="form-label" style="font-size:0.92em; margin-bottom:2px;">Zoom</label>
+            <input type="range" class="form-range" id="zoomRange" min="10" max="200" value="100">
+          </div>
+        </div>
+        <div id="filterSummary" class="mb-2"></div>
+      </div>
     </div>
   </div>
-  <div id="filterBox" class="control-box flex-grow-1">
-    <form id="filterForm">
-      <div class="table-responsive">
-      <table class="table table-bordered table-sm">
+
+  <div id="matchingLinesSection">
+    <h2 id="match-count">0 Matching lines:</h2>
+    <div class="table-responsive">
+      <table class="table table-bordered table-sm" id="results">
         <thead>
-            <tr>
-                <th>Classification key</th>
-                <th>Filter</th>
-            </tr>
+          <tr>
+            <th>Prompt <small class="text-muted">(hover for classifications)</small></th>
+          </tr>
         </thead>
-        <tbody id="filterBody">
+        <tbody>
         </tbody>
       </table>
-      </div>
-      <div id="pairFilters" class="my-2"></div>
-      <div id="suggestions" class="my-2"></div>
-      <button type="submit" class="btn btn-primary my-2">Generate subset</button>
-    </form>
+    </div>
   </div>
+</div>
+
 </div>
 <div id="wordTooltip"></div>
 <h2 id="match-count">0 Matching lines:</h2>

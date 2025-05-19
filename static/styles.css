@@ -1,22 +1,26 @@
-@import url('https://fonts.googleapis.com/css2?family=Roboto&display=swap');
 body {
     font-family: 'Roboto', Arial, sans-serif;
     padding: 1rem;
+    overflow-x: hidden;
 }
+
 h1, h2 {
     text-align: center;
     margin-top: 1rem;
     margin-bottom: 1rem;
 }
+
 table {
     width: 100%;
     table-layout: fixed;
     word-wrap: break-word;
 }
+
 canvas {
     max-width: 100%;
     height: auto;
 }
+
 @media (max-width: 576px) {
     table {
         font-size: 0.85rem;
@@ -67,37 +71,153 @@ mark {
     z-index: 1000;
 }
 
-/* Layout for zoom slider and filter table */
-#controlsRow {
-    display: flex;
-    gap: 1rem;
-    padding: 0.5rem 0;
-    align-items: flex-start;
+/* --- NEW, CLEAN LAYOUT --- */
+#mainRow {
+  display: flex;
+  gap: 2rem;
+  align-items: flex-start;
+  max-width: 1400px;
+  margin: 0 auto 2rem auto;
 }
+
+#leftCol {
+  flex: 2;
+  min-width: 440px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+#rightCol #zoomBox.control-box {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+#rightCol #zoomBox.control-box {
+  border-top: 1px solid #ddd;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+}
+
 
 #zoomBox {
-    flex: 0 0 25%;
-    min-width: 200px;
+  margin-bottom: 1rem;
 }
 
-#filterBox {
-    flex: 1 1 75%;
-}
-
-.zoom-control {
-    width: 100%;
-    max-width: none;
-    margin-bottom: 0;
+#wordCloudSection {
+  width: 100%;
 }
 
 .control-box {
-    border: 1px solid #dee2e6;
-    padding: 1rem;
-    background-color: #f8f9fa;
-    border-radius: 0.25rem;
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 0.25rem;
+  padding: 1rem;
+  box-sizing: border-box;
+  height: fit-content;
 }
 
-.suggested {
-    font-weight: bold;
-    color: #007bff;
+#rightCol .table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+#compactControlsRow {
+  display: flex;
+  flex-direction: row;
+  gap: 1.2rem;
+  margin-top: 1.2rem;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.wordsearch-box,
+.zoom-box-compact {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.wordsearch-box input,
+.zoom-box-compact input[type="range"] {
+  margin-top: 0.25rem;
+}
+
+#zoomRange {
+  width: 100%;
+}
+
+#mainContent {
+  max-width: 1400px;
+  margin: 0 auto 2rem auto;
+}
+
+#mainRow {
+  display: flex;
+  gap: 2rem;
+  align-items: flex-start;
+  max-width: 1400px;
+  margin: 0 auto 2rem auto;
+}
+
+#leftCol {
+  flex: 2;
+  min-width: 440px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+#rightCol {
+  flex: 1;
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
+}
+
+#filterBox.control-box {
+  margin-bottom: 0;
+}
+
+#compactControlsRow {
+  display: flex;
+  flex-direction: row;
+  gap: 1.2rem;
+  margin-top: 1.2rem;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.wordsearch-box,
+.zoom-box-compact {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.wordsearch-box input,
+.zoom-box-compact input[type="range"] {
+  margin-top: 0.25rem;
+}
+
+#zoomRange {
+  width: 100%;
+}
+
+#matchingLinesSection {
+  margin-top: 2rem;
+}
+
+.control-box {
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 0.25rem;
+  padding: 1rem;
+  box-sizing: border-box;
+  height: fit-content;
 }
