@@ -61,28 +61,30 @@
 <h2>Word Cloud</h2>
 <p class="text-muted">Click a word to set the search bar to that term.</p>
 <canvas id="wordCloud" class="mb-4"></canvas>
-<div class="mb-3">
-  <label for="zoomRange" class="form-label">Zoom</label>
-  <input type="range" class="form-range" id="zoomRange" min="10" max="200" value="100">
+<div class="d-flex flex-wrap mb-4">
+  <div class="me-4 mb-3">
+    <label for="zoomRange" class="form-label">Zoom</label>
+    <input type="range" class="form-range" id="zoomRange" min="10" max="200" value="100">
+  </div>
+  <form id="filterForm" class="flex-grow-1 mb-3">
+    <div class="table-responsive">
+    <table class="table table-bordered table-sm">
+        <thead>
+            <tr>
+                <th>Classification key</th>
+                <th>Filter</th>
+            </tr>
+        </thead>
+        <tbody id="filterBody">
+        </tbody>
+    </table>
+    </div>
+    <div id="pairFilters" class="my-2"></div>
+    <div id="suggestions" class="my-2"></div>
+    <button type="submit" class="btn btn-primary my-2">Generate subset</button>
+</form>
 </div>
 <div id="wordTooltip"></div>
-<form id="filterForm" class="mb-4">
-<div class="table-responsive">
-<table class="table table-bordered table-sm">
-    <thead>
-        <tr>
-            <th>Classification key</th>
-            <th>Filter</th>
-        </tr>
-    </thead>
-    <tbody id="filterBody">
-    </tbody>
-</table>
-</div>
-<div id="pairFilters" class="my-2"></div>
-<div id="suggestions" class="my-2"></div>
-<button type="submit" class="btn btn-primary my-2">Generate subset</button>
-</form>
 <h2 id="match-count">0 Matching lines:</h2>
 <div class="table-responsive">
 <table class="table table-bordered table-sm" id="results">
@@ -331,15 +333,9 @@ buildFilterTable();
 document.getElementById('filterForm').addEventListener('change', generateSubset);
 document.getElementById('searchQuery').addEventListener('input', generateSubset);
 
-const BASE_CANVAS_SIZE = 500;
+const CANVAS_HEIGHT = 500;
 document.getElementById("zoomRange").addEventListener("input", e => {
     currentZoom = e.target.value / 100;
-    const canvas = document.getElementById('wordCloud');
-    if (canvas) {
-        const size = BASE_CANVAS_SIZE * currentZoom;
-        canvas.style.width = size + 'px';
-        canvas.style.height = size + 'px';
-    }
     renderWordCloud(lastWordCounts);
 });
 window.addEventListener('resize', () => renderWordCloud(lastWordCounts));
@@ -717,11 +713,12 @@ function renderWordCloud(counts) {
     const canvas = document.getElementById('wordCloud');
     const tooltip = document.getElementById('wordTooltip');
     if (canvas) {
-        const rect = canvas.getBoundingClientRect();
-        canvas.width = rect.width * WORD_CLOUD_SCALE;
-        canvas.height = rect.height * WORD_CLOUD_SCALE;
-        canvas.style.width = rect.width + 'px';
-        canvas.style.height = rect.height + 'px';
+        const parent = canvas.parentElement;
+        const width = parent ? parent.offsetWidth : canvas.offsetWidth;
+        canvas.width = width * WORD_CLOUD_SCALE;
+        canvas.height = CANVAS_HEIGHT * WORD_CLOUD_SCALE;
+        canvas.style.width = width + 'px';
+        canvas.style.height = CANVAS_HEIGHT + 'px';
     }
     const list = Object.entries(counts)
         .filter(([w, c]) => c >= MIN_WORD_FREQ)
