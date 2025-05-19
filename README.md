@@ -36,12 +36,12 @@ Then open `subset-client.html` in your web browser. Select your desired valuesâ€
 
 ![Screenshot of violence+self-harm combination subset of prompts.](EW_example_V+SH.png "Results update automatically when you change classifications")
 
-Below is a histogram showing how frequently each label combination appears in the dataset.
+*(Screenshot from an older version of the UI; the interface has since changed slightly.)*
 
-![Histogram of key combinations.](combinations_histogram.png "Distribution of label combinations")
+The client page now includes visualizations rendered with Chart.js. After generating `dataset.js`, open the page to see bar charts of single-category counts, a heatmap of pairwise co-occurrences, and a histogram of key combinations. The chart on the left counts prompts for each single category, the heatmap in the middle shows how often pairs of categories appear together (brighter squares indicate more co-occurrences), and the histogram on the right counts how frequently each set of category keys occurs.
 
+![Charts of single-category counts, pairwise co-occurrences, and key combination frequencies.](category-graphs.png "Single-category counts, pairwise co-occurrences, and key combination frequencies")
 
-The client page now includes visualizations rendered with Chart.js. After generating `dataset.js`, open the page to see bar charts of single-category counts, a heatmap of pairwise co-occurrences, and a histogram of key combinations.
 If the charts do not appear, check the browser console for error messages.
 
 ## What is EW's technology stack?
