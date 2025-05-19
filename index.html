@@ -28,6 +28,27 @@
 <div id="loading"><div class="spinner"></div>Loading dataset...</div>
 <div class="container my-4">
 <h1>Explore-wrongthink</h1>
+<p class="text-danger">Contains potentially disturbing text.</p>
+<details class="mb-3">
+  <summary>Category definitions</summary>
+  <div class="table-responsive">
+  <table class="table table-bordered table-sm mt-2">
+    <thead>
+      <tr><th>Category</th><th>Label</th><th>Definition</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>sexual</td><td>S</td><td>Content meant to arouse sexual excitement, such as the description of sexual activity, or that promotes sexual services (excluding sex education and wellness).</td></tr>
+      <tr><td>hate</td><td>H</td><td>Content that expresses, incites, or promotes hate based on race, gender, ethnicity, religion, nationality, sexual orientation, disability status, or caste.</td></tr>
+      <tr><td>violence</td><td>V</td><td>Content that promotes or glorifies violence or celebrates the suffering or humiliation of others.</td></tr>
+      <tr><td>harassment</td><td>HR</td><td>Content that may be used to torment or annoy individuals in real life, or make harassment more likely to occur.</td></tr>
+      <tr><td>self-harm</td><td>SH</td><td>Content that promotes, encourages, or depicts acts of self-harm, such as suicide, cutting, and eating disorders.</td></tr>
+      <tr><td>sexual/minors</td><td>S3</td><td>Sexual content that includes an individual who is under 18 years old.</td></tr>
+      <tr><td>hate/threatening</td><td>H2</td><td>Hateful content that also includes violence or serious harm towards the targeted group.</td></tr>
+      <tr><td>violence/graphic</td><td>V2</td><td>Violent content that depicts death, violence, or serious physical injury in extreme graphic detail.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</details>
 <label for="searchQuery" class="form-label">Word Search</label>
 <input type="text" id="searchQuery" class="form-control mb-3" placeholder="Search prompts by keyword…">
 <div id="filterSummary" class="mb-3"></div>
@@ -87,6 +108,16 @@ const checkboxLabelMapping = {
     'V2': 'violence/graphic (V2)',
     'None': 'no categories flagged'
 };
+const checkboxDefinitionMapping = {
+    'S': 'Content meant to arouse sexual excitement, such as the description of sexual activity, or that promotes sexual services (excluding sex education and wellness).',
+    'H': 'Content that expresses, incites, or promotes hate based on race, gender, ethnicity, religion, nationality, sexual orientation, disability status, or caste.',
+    'V': 'Content that promotes or glorifies violence or celebrates the suffering or humiliation of others.',
+    'HR': 'Content that may be used to torment or annoy individuals in real life, or make harassment more likely to occur.',
+    'SH': 'Content that promotes, encourages, or depicts acts of self-harm, such as suicide, cutting, and eating disorders.',
+    'S3': 'Sexual content that includes an individual who is under 18 years old.',
+    'H2': 'Hateful content that also includes violence or serious harm towards the targeted group.',
+    'V2': 'Violent content that depicts death, violence, or serious physical injury in extreme graphic detail.'
+};
 const checkboxes = Object.keys(checkboxLabelMapping);
 const CATEGORY_KEYS = checkboxes.filter(k => k !== 'None');
 
@@ -94,8 +125,9 @@ function buildFilterTable() {
     const tbody = document.getElementById('filterBody');
     checkboxes.forEach(cb => {
         const tr = document.createElement('tr');
+        const def = checkboxDefinitionMapping[cb] || '';
         tr.innerHTML =
-            `<td><label for="tri-${cb}" class="category-label">${checkboxLabelMapping[cb]}</label> ` +
+            `<td><label for="tri-${cb}" class="category-label" title="${def}">${checkboxLabelMapping[cb]}</label> ` +
             `<a href="#" id="count-${cb}" class="count-link small ms-1"></a></td>` +
             `<td><input id="tri-${cb}" type="checkbox" class="tristate" data-state="Any"><span class="ms-1 state-label" id="tri-${cb}-label">Any</span></td>`;
         tbody.appendChild(tr);
