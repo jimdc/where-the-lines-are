@@ -55,6 +55,11 @@
 <h2>Word Cloud</h2>
 <p class="text-muted">Click a word to set the search bar to that term.</p>
 <canvas id="wordCloud" class="mb-4"></canvas>
+<div class="mb-3">
+  <label for="zoomRange" class="form-label">Zoom</label>
+  <input type="range" class="form-range" id="zoomRange" min="50" max="200" value="100">
+</div>
+<div id="wordTooltip"></div>
 <form id="filterForm" class="mb-4">
 <div class="table-responsive">
 <table class="table table-bordered table-sm">
@@ -296,15 +301,17 @@ function generateSubset(event) {
         tbody.appendChild(tr);
     }
 
-    const counts = computeWordCounts(subset);
-    renderWordCloud(counts);
-}
-
+    lastWordCounts = computeWordCounts(subset);
+    renderWordCloud(lastWordCounts);
 document.getElementById('filterForm').addEventListener('submit', generateSubset);
 buildFilterTable();
 document.getElementById('filterForm').addEventListener('change', generateSubset);
 document.getElementById('searchQuery').addEventListener('input', generateSubset);
 
+document.getElementById("zoomRange").addEventListener("input", e => {
+    currentZoom = e.target.value / 100;
+    renderWordCloud(lastWordCounts);
+});
 const KEYS = CATEGORY_KEYS;
 
 const datasetPromise = new Promise((resolve, reject) => {
@@ -637,13 +644,27 @@ function computeWordCounts(data) {
 }
 
 function renderWordCloud(counts) {
-    const list = Object.entries(counts);
-    WordCloud(document.getElementById('wordCloud'), {
+    const canvas = document.getElementById('wordCloud');
+    const tooltip = document.getElementById('wordTooltip');
+    const list = Object.entries(counts)
+        .filter(([w, c]) => c >= MIN_WORD_FREQ)
+        .sort((a, b) => b[1] - a[1]);
+    WordCloud(canvas, {
         list,
-        weightFactor: 2,
-        gridSize: 8,
+        weightFactor: s => Math.pow(s, 1.3) * currentZoom,
+        gridSize: Math.round(8 * currentZoom),
         backgroundColor: '#fff',
         color: 'random-dark',
+        hover: (item, dimension, evt) => {
+            if (tooltip && item) {
+                tooltip.textContent = `${item[0]}: ${item[1]}`;
+                tooltip.style.left = (evt.clientX + 5) + 'px';
+                tooltip.style.top = (evt.clientY + 5) + 'px';
+                tooltip.style.display = 'block';
+            } else if (tooltip) {
+                tooltip.style.display = 'none';
+            }
+        },
         click: item => {
             const search = document.getElementById('searchQuery');
             if (search && item && item[0]) {
@@ -652,6 +673,7 @@ function renderWordCloud(counts) {
             }
         }
     });
+
 }
 
 
@@ -668,6 +690,9 @@ function safeExecute(name, fn) {
 }
 
 let singleChart;
+let currentZoom = 1;
+let lastWordCounts = {};
+const MIN_WORD_FREQ = 3;
 
 datasetPromise.then(() => {
     document.getElementById('loading').style.display = 'none';
