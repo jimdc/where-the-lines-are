@@ -51,7 +51,7 @@ Paste that URL into your browser and explore the different combinations. For an 
 
 ## What is EW's technology stack?
 
-These are two self-contained python scripts that mostly use standard libraries like `json`.  The visualizer uses `matplotlib.pyplot` and `seaborn`, and the subset generator uses Flask to generate results and a little bit of Javascript for bulk setting of radio buttons.
+These are two self-contained python scripts that mostly use standard libraries like `json`.  The visualizer uses `matplotlib.pyplot` and `seaborn`, and the subset generator uses Flask to generate results and a little bit of JavaScript for bulk setting of radio buttons.
 
 ## Roadmap/wishlist
 
@@ -61,6 +61,6 @@ These are two self-contained python scripts that mostly use standard libraries l
 * Show which keys appear most in triple-combos, quadruple-combos, etc.
 
 ### Subset generator
-* Client-side Javascript version that does not require Python
+* Client-side JavaScript version that does not require Python
 * Add more options: "N/A" ? "1 or N/A" ? Better way to organize them?
 * Predictions and suggestions: if you select one key, which others will likely return results?
