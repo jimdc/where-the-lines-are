@@ -82,7 +82,14 @@ mark {
 }
 .zoom-control {
     max-width: 260px;
-    margin-bottom: 1rem;
+    margin-bottom: 0;
+}
+
+.control-box {
+    border: 1px solid #dee2e6;
+    padding: 1rem;
+    background-color: #f8f9fa;
+    border-radius: 0.25rem;
 }
 
 .suggested {

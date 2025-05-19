@@ -62,13 +62,16 @@
 <p class="text-muted">Click a word to set the search bar to that term.</p>
 <canvas id="wordCloud" class="mb-4"></canvas>
 <div id="controlsRow" class="mb-4">
-  <div class="zoom-control">
-    <label for="zoomRange" class="form-label">Zoom</label>
-    <input type="range" class="form-range" id="zoomRange" min="10" max="200" value="100">
+  <div id="zoomBox" class="control-box">
+    <div class="zoom-control">
+      <label for="zoomRange" class="form-label">Zoom</label>
+      <input type="range" class="form-range" id="zoomRange" min="10" max="200" value="100">
+    </div>
   </div>
-  <form id="filterForm" class="flex-grow-1">
-    <div class="table-responsive">
-    <table class="table table-bordered table-sm">
+  <div id="filterBox" class="control-box flex-grow-1">
+    <form id="filterForm">
+      <div class="table-responsive">
+      <table class="table table-bordered table-sm">
         <thead>
             <tr>
                 <th>Classification key</th>
@@ -77,12 +80,13 @@
         </thead>
         <tbody id="filterBody">
         </tbody>
-    </table>
-    </div>
-    <div id="pairFilters" class="my-2"></div>
-    <div id="suggestions" class="my-2"></div>
-    <button type="submit" class="btn btn-primary my-2">Generate subset</button>
-</form>
+      </table>
+      </div>
+      <div id="pairFilters" class="my-2"></div>
+      <div id="suggestions" class="my-2"></div>
+      <button type="submit" class="btn btn-primary my-2">Generate subset</button>
+    </form>
+  </div>
 </div>
 <div id="wordTooltip"></div>
 <h2 id="match-count">0 Matching lines:</h2>
