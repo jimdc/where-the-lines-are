@@ -2,7 +2,8 @@ const CACHE_NAME = 'ew-cache-v1';
 const URLS_TO_CACHE = [
   './',
   './index.html',
-  './dataset.js',
+  './dataset-loader.js',
+  './dataset.json',
   './static/styles.css',
   './manifest.json',
   './icon-192.png',

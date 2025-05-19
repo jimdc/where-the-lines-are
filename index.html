@@ -316,25 +316,29 @@ const KEYS = CATEGORY_KEYS;
 
 const datasetPromise = new Promise((resolve, reject) => {
     console.log('Initializing dataset load');
-    const script = document.createElement('script');
     const loading = document.getElementById('loading');
     if (loading) loading.textContent = 'Fetching dataset...';
-    script.src = 'dataset.js';
-    script.onload = () => {
-        console.log('dataset.js onload fired');
-        if (typeof dataset === 'undefined') {
-            reject(new Error('dataset variable missing after load'));
-            return;
-        }
-        console.log('Dataset length:', Array.isArray(dataset) ? dataset.length : 'unknown');
+
+    window.datasetResolve = () => {
+        console.log('Dataset loaded');
         resolve();
     };
+    window.datasetReject = err => {
+        console.error('dataset.json failed to load', err);
+        reject(new Error('Failed to load dataset.json'));
+    };
+
+    const script = document.createElement('script');
+    script.src = 'dataset-loader.js';
+    script.onload = () => {
+        console.log('dataset-loader.js onload fired');
+    };
     script.onerror = err => {
-        console.error('dataset.js failed to load', err);
-        reject(new Error('Failed to load dataset.js'));
+        console.error('dataset-loader.js failed to load', err);
+        reject(new Error('Failed to load dataset-loader.js'));
     };
     document.head.appendChild(script);
-    console.log('dataset.js script appended');
+    console.log('dataset-loader.js script appended');
 });
 
 let datasetLoaded = false;
@@ -751,7 +755,7 @@ datasetPromise.then(() => {
 }).catch(err => {
     const loading = document.getElementById('loading');
     if (loading) loading.textContent = 'Error loading dataset: ' + (err.message || err);
-    console.error('Failed to load dataset.js', err);
+    console.error('Failed to load dataset', err);
 });
 </script>
 <script>
