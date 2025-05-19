@@ -51,3 +51,10 @@ The page also shows loading debug messages directly below the spinner. These now
 include numbered steps (1–5) describing each part of the loading process. If the
 dataset fails to load, these messages will show exactly which step failed along
 with HTTP status codes and other details to help diagnose the problem.
+
+## Clearing an outdated cache
+
+If you previously loaded the page, your browser may still hold an old
+service-worker cache. Open your browser's developer tools, go to the
+"Application" panel, and clear the stored caches or unregister the service
+worker. Reload the page afterward so the new `ew-cache-v2` files are cached.
