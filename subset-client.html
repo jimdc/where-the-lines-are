@@ -239,8 +239,14 @@ function drawPairwiseHeatmap(pairCounts) {
                 const alpha = max ? v / max : 0;
                 return `rgba(0, 123, 255, ${alpha})`;
             },
-            width: ({chart}) => (chart.chartArea.width / KEYS.length) - 1,
-            height: ({chart}) => (chart.chartArea.height / KEYS.length) - 1
+            width: ({chart}) => {
+                const area = chart.chartArea || {};
+                return area.width ? (area.width / KEYS.length) - 1 : 0;
+            },
+            height: ({chart}) => {
+                const area = chart.chartArea || {};
+                return area.height ? (area.height / KEYS.length) - 1 : 0;
+            }
         }] },
         options: {
             scales: {
