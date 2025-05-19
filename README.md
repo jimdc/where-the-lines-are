@@ -38,11 +38,3 @@ The chart on the left counts prompts for each single category, the heatmap in th
 ![Charts of single-category counts, pairwise co-occurrences, and key combination frequencies.](category-graphs.png "Single-category counts, pairwise co-occurrences, and key combination frequencies")
 
 If the charts do not appear, check the browser console for error messages.
-
-## GitHub Pages
-
-To share the viewer online, enable GitHub Pages for the `main` branch in the repository settings and choose the root folder as the source. After a short delay your site will be available at `https://<your-username>.github.io/<repo-name>/`.
-
-The moderation dataset is already included in `dataset.js`, so no additional server setup is needed.
-
-
