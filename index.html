@@ -331,8 +331,15 @@ buildFilterTable();
 document.getElementById('filterForm').addEventListener('change', generateSubset);
 document.getElementById('searchQuery').addEventListener('input', generateSubset);
 
+const BASE_CANVAS_SIZE = 500;
 document.getElementById("zoomRange").addEventListener("input", e => {
     currentZoom = e.target.value / 100;
+    const canvas = document.getElementById('wordCloud');
+    if (canvas) {
+        const size = BASE_CANVAS_SIZE * currentZoom;
+        canvas.style.width = size + 'px';
+        canvas.style.height = size + 'px';
+    }
     renderWordCloud(lastWordCounts);
 });
 window.addEventListener('resize', () => renderWordCloud(lastWordCounts));
@@ -722,7 +729,7 @@ function renderWordCloud(counts) {
     WordCloud(canvas, {
         list,
         weightFactor: s => Math.pow(s, 1.3) * currentZoom * BASE_WEIGHT_SCALE,
-        gridSize: Math.max(1, Math.round(4 * currentZoom)),
+        gridSize: Math.max(1, Math.round(2 * currentZoom)),
         backgroundColor: '#fff',
         color: 'random-dark',
         hover: (item, dimension, evt) => {
@@ -763,7 +770,7 @@ let singleChart;
 let currentZoom = 1;
 let lastWordCounts = {};
 const MIN_WORD_FREQ = 3;
-const BASE_WEIGHT_SCALE = 0.25; // reduce word sizes overall
+const BASE_WEIGHT_SCALE = 0.15; // reduce word sizes overall
 const WORD_CLOUD_SCALE = 2;     // enlarge canvas area for layout
 
 datasetPromise.then(() => {
