@@ -84,6 +84,7 @@ def index():
                 });
             }
         </script>
+        <form method="POST">
         <table border="1">
             <thead>
                 <tr>
@@ -103,7 +104,6 @@ def index():
                     <th>Value on last generation</th>
                 </tr>
             </thead>
-            <form method="POST">
             <tbody>
 {% for checkbox in checkboxes %}
                 <tr>
@@ -114,8 +114,8 @@ def index():
                     <td><input type="radio" name="radio-{{ checkbox }}" value="0 or N/A" {% if checkbox_values[checkbox] == '0 or N/A' %} checked {% endif %}>0 or N/A</td>
                     <td>{{ checkbox_values[checkbox] if checkbox_values[checkbox] != 'Any' else 'N/A' }}</td>
                 </tr>
-            </tbody>
 {% endfor %}
+            </tbody>
         </table>
         <br><input type="submit" value="Generate subset" style="font-size:18px; padding:10px;">
         </form>
