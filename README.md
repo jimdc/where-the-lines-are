@@ -30,7 +30,7 @@ Future versions of EW should be able to compare and contrast different datasets.
 ### Visualizer
 After cloning, type the following into the console:
 ```
-python combinations.py
+python explore.py combinations
 ```
 
 An image will appear like this:
@@ -40,7 +40,7 @@ An image will appear like this:
 ### Subset generator
 To start the prompt filter program in the console,
 ```
-python generate-subsets.py
+python explore.py subset
 ```
 
 And then it will show an output like `Running on http://127.0.0.1:5000`.
@@ -49,22 +49,18 @@ Paste that URL into your browser and explore the different combinations. For an 
 
 ![Screenshot of violence+self-harm combination subset of prompts.](EW_example_V+SH.png "Select your desired values and click on 'Generate subset'")
 
-You can also use the client-side version. Run `python scripts/jsonl_to_js.py` to
-create `dataset.js`, then open `subset-client.html` in your browser. The page
-uses this generated file for filtering. Some browsers block loading local files,
-so if nothing appears, start a simple HTTP server (e.g. run `python3 -m
-http.server`) and visit `http://localhost:8000/subset-client.html` instead.
+You can also use the client-side version. Run `python scripts/jsonl_to_js.py` to create `dataset.js`, then open `subset-client.html` in your browser. When the Flask app is running, visit `/subset-client` to view the same page served through the app. Some browsers block loading local files, so if nothing appears, start a simple HTTP server (e.g. run `python3 -m http.server`) and visit `http://localhost:8000/subset-client.html` instead.
 
 ### Category analysis
 To compare how frequently each category appears and which combinations are most common, run
 ```
-python category_analysis.py
+python explore.py analysis
 ```
 This prints the counts for each individual category, shows a bar chart of those counts, and renders a heatmap of pairwise co-occurrences.
 
 ## What is EW's technology stack?
 
-These are two self-contained python scripts that mostly use standard libraries like `json`.  The visualizer uses `matplotlib.pyplot` and `seaborn`, and the subset generator uses Flask to generate results and a little bit of JavaScript for bulk setting of radio buttons.
+EW is now organized as a small package of Python modules. It still relies mostly on standard libraries. The visualizer uses `matplotlib.pyplot` and `seaborn`, and the subset generator uses Flask plus a little JavaScript for bulk radio-button controls.
 
 ## Roadmap/wishlist
 
