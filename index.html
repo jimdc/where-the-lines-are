@@ -200,11 +200,37 @@ function getRowValue(row, key) {
 }
 
 
+function escapeHtml(str) {
+    return str.replace(/[&<>"']/g, c => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    })[c]);
+}
+
+function highlightPrompt(text, search) {
+    if (!search) return escapeHtml(text);
+    const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    let last = 0;
+    let out = '';
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+        out += escapeHtml(text.slice(last, match.index));
+        out += '<mark>' + escapeHtml(match[0]) + '</mark>';
+        last = match.index + match[0].length;
+    }
+    out += escapeHtml(text.slice(last));
+    return out;
+}
+
 function generateSubset(event) {
     if (event) {
         event.preventDefault();
     }
-    const query = document.getElementById('searchQuery').value.trim().toLowerCase();
+    const rawQuery = document.getElementById('searchQuery').value.trim();
+    const query = rawQuery.toLowerCase();
     const values = {};
     checkboxes.forEach(cb => {
         const el = document.getElementById(`tri-${cb}`);
@@ -217,7 +243,7 @@ function generateSubset(event) {
             summaryParts.push(`${cb}: ${state}`);
         }
     });
-    if (query) summaryParts.push(`search: "${query}"`);
+    if (rawQuery) summaryParts.push(`search: "${rawQuery}"`);
     const summaryEl = document.getElementById('filterSummary');
     if (summaryEl) {
         summaryEl.textContent = summaryParts.length ? summaryParts.join(', ') : 'No filters applied';
@@ -257,7 +283,7 @@ function generateSubset(event) {
         if (row.keys_1) info.push(`1: ${row.keys_1}`);
         if (row.keys_0) info.push(`0: ${row.keys_0}`);
         if (row.keys_na) info.push(`N/A: ${row.keys_na}`);
-        td.textContent = row.prompt;
+        td.innerHTML = highlightPrompt(row.prompt, rawQuery);
         if (info.length) td.title = info.join(' | ');
         tr.appendChild(td);
         tbody.appendChild(tr);
