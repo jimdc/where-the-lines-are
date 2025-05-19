@@ -38,7 +38,7 @@ An image will appear like this:
 
 
 ### Subset generator
-To start the prompt filter program in the console, 
+To start the prompt filter program in the console,
 ```
 python generate-subsets.py
 ```
@@ -48,6 +48,8 @@ And then it will show an output like `Running on http://127.0.0.1:5000`.
 Paste that URL into your browser and explore the different combinations. For an example, an input of "V" (violence) + "SH" (self-harm) parameters as 1, with all others being 0, gives two prompts:
 
 ![Screenshot of violence+self-harm combination subset of prompts.](EW_example_V+SH.png "Select your desired values and click on 'Generate subset'")
+
+You can also use the client-side version by simply opening `subset-client.html` in your browser. It loads `samples-1680.jsonl` directly and performs the filtering with JavaScript, so no Python server is required.
 
 ## What is EW's technology stack?
 
@@ -61,6 +63,6 @@ These are two self-contained python scripts that mostly use standard libraries l
 * Show which keys appear most in triple-combos, quadruple-combos, etc.
 
 ### Subset generator
-* Client-side Javascript version that does not require Python
+* Client-side Javascript version that does not require Python (done)
 * Add more options: "N/A" ? "1 or N/A" ? Better way to organize them?
 * Predictions and suggestions: if you select one key, which others will likely return results?

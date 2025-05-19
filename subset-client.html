@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Explore-wrongthink</title>
+    <style>
+        h1, h2 {
+            text-align: center;
+        }
+        table {
+            width: 100%;
+            table-layout: fixed;
+        }
+        th, td {
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+<h1>Explore-wrongthink</h1>
+<form id="filterForm">
+<table border="1">
+    <thead>
+        <tr>
+            <th>Classification key</th>
+            <th><button type="button" onclick="setAllRadioButtons('0')">Set all values</button> = 0</th>
+            <th><button type="button" onclick="setAllRadioButtons('1')">Set all values</button> = 1</th>
+            <th><button type="button" onclick="setAllRadioButtons('Any')">Set all values</button> = Any</th>
+            <th><button type="button" onclick="setAllRadioButtons('0 or N/A')">Set all values</button> = 0 or N/A</th>
+            <th>Value on last generation</th>
+        </tr>
+    </thead>
+    <tbody id="filterBody">
+    </tbody>
+</table>
+<br><input type="submit" value="Generate subset" style="font-size:18px;padding:10px;">
+</form>
+<h2 id="match-count">0 Matching lines:</h2>
+<table border="1" id="results">
+    <thead>
+        <tr>
+            <th>Prompt</th>
+            <th>Value = 0</th>
+            <th>Value = 1</th>
+            <th>Value = N/A</th>
+        </tr>
+    </thead>
+    <tbody>
+    </tbody>
+</table>
+<script>
+const checkboxLabelMapping = {
+    'S': 'sexual (S)',
+    'H': 'hate (H)',
+    'V': 'violence (V)',
+    'HR': 'harassment (HR)',
+    'SH': 'self-harm (SH)',
+    'S3': 'sexual/minors (S3)',
+    'H2': 'hate/threatening (H2)',
+    'V2': 'violence/graphic (V2)'
+};
+const checkboxes = Object.keys(checkboxLabelMapping);
+let dataset = [];
+
+function setAllRadioButtons(value) {
+    document.querySelectorAll('input[type="radio"]').forEach(radio => {
+        if (radio.value === value) {
+            radio.checked = true;
+        }
+    });
+}
+
+function buildFilterTable() {
+    const tbody = document.getElementById('filterBody');
+    checkboxes.forEach(cb => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td><label>${checkboxLabelMapping[cb]}</label></td>` +
+            `<td><input type="radio" name="radio-${cb}" value="0">0</td>` +
+            `<td><input type="radio" name="radio-${cb}" value="1">1</td>` +
+            `<td><input type="radio" name="radio-${cb}" value="Any" checked>Any</td>` +
+            `<td><input type="radio" name="radio-${cb}" value="0 or N/A">0 or N/A</td>` +
+            `<td>N/A</td>`;
+        tbody.appendChild(tr);
+    });
+}
+
+function loadData() {
+    fetch('samples-1680.jsonl')
+        .then(resp => resp.text())
+        .then(text => {
+            dataset = text.trim().split('\n').map(line => JSON.parse(line));
+        });
+}
+
+function generateSubset(event) {
+    event.preventDefault();
+    const formData = new FormData(document.getElementById('filterForm'));
+    const values = {};
+    checkboxes.forEach(cb => {
+        values[cb] = formData.get(`radio-${cb}`) || 'Any';
+    });
+    const results = dataset.filter(row => {
+        return checkboxes.every(key => {
+            const rowValue = row[key] !== undefined ? String(row[key]) : 'N/A';
+            const selected = values[key];
+            return selected === 'Any' || rowValue === selected ||
+                   (selected === '0 or N/A' && (rowValue === '0' || rowValue === 'N/A'));
+        });
+    }).map(row => {
+        const keys0 = [];
+        const keys1 = [];
+        const keysNA = [];
+        checkboxes.forEach(key => {
+            const rowValue = row[key] !== undefined ? String(row[key]) : 'N/A';
+            if (rowValue === '0') keys0.push(checkboxLabelMapping[key]);
+            else if (rowValue === '1') keys1.push(checkboxLabelMapping[key]);
+            else keysNA.push(checkboxLabelMapping[key]);
+        });
+        return { prompt: row.prompt || 'N/A', keys_0: keys0.join(', '), keys_1: keys1.join(', '), keys_na: keysNA.join(', ') };
+    });
+
+    document.getElementById('match-count').textContent = `${results.length} Matching lines:`;
+    const tbody = document.querySelector('#results tbody');
+    tbody.innerHTML = '';
+    results.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${row.prompt}</td><td>${row.keys_0}</td><td>${row.keys_1}</td><td>${row.keys_na}</td>`;
+        tbody.appendChild(tr);
+    });
+}
+
+document.getElementById('filterForm').addEventListener('submit', generateSubset);
+buildFilterTable();
+loadData();
+</script>
+</body>
+</html>
