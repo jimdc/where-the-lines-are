@@ -85,10 +85,21 @@ function buildFilterTable() {
 }
 
 function loadData() {
-    fetch('samples-1680.jsonl')
-        .then(resp => resp.text())
+    return fetch('samples-1680.jsonl')
+        .then(resp => {
+            if (!resp.ok) throw new Error('Network response was not ok');
+            return resp.text();
+        })
         .then(text => {
             dataset = text.trim().split('\n').map(line => JSON.parse(line));
+        })
+        .catch(err => {
+            const msg = document.createElement('div');
+            msg.style.color = 'red';
+            msg.textContent = 'Failed to load samples-1680.jsonl. ' +
+                'Try running a local HTTP server (e.g. "python3 -m http.server") and open this file via http://localhost:8000/.';
+            document.body.insertBefore(msg, document.body.firstChild);
+            console.error('Error loading data:', err);
         });
 }
 
