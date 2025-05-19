@@ -315,30 +315,48 @@ document.getElementById("zoomRange").addEventListener("input", e => {
 const KEYS = CATEGORY_KEYS;
 
 const datasetPromise = new Promise((resolve, reject) => {
+    console.log('Initializing dataset load');
     const script = document.createElement('script');
     const loading = document.getElementById('loading');
     if (loading) loading.textContent = 'Fetching dataset...';
     script.src = 'dataset.js';
     script.onload = () => {
-        console.log('dataset.js loaded');
+        console.log('dataset.js onload fired');
         if (typeof dataset === 'undefined') {
             reject(new Error('dataset variable missing after load'));
             return;
         }
+        console.log('Dataset length:', Array.isArray(dataset) ? dataset.length : 'unknown');
         resolve();
     };
-    script.onerror = () => reject(new Error('Failed to load dataset.js'));
+    script.onerror = err => {
+        console.error('dataset.js failed to load', err);
+        reject(new Error('Failed to load dataset.js'));
+    };
     document.head.appendChild(script);
+    console.log('dataset.js script appended');
 });
 
+let datasetLoaded = false;
+datasetPromise.then(() => { datasetLoaded = true; });
+
 setTimeout(() => {
-    if (typeof dataset === 'undefined') {
+    if (!datasetLoaded) {
         const loading = document.getElementById('loading');
         if (loading && loading.textContent.includes('Fetching')) {
             loading.textContent += ' (still loading, check console)';
         }
+        console.warn('Dataset still not loaded after 5s');
     }
 }, 5000);
+
+setTimeout(() => {
+    if (!datasetLoaded) {
+        const loading = document.getElementById('loading');
+        if (loading) loading.textContent = 'Failed to load dataset. Check console.';
+        console.error('Dataset failed to load within 10s');
+    }
+}, 10000);
 
 function gloss(key) {
     return checkboxLabelMapping[key] || key;
