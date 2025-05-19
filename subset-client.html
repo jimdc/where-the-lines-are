@@ -336,7 +336,7 @@ function computeWordCounts(data) {
         if (!row.prompt) return;
         const words = row.prompt.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
         words.forEach(w => {
-            if (w && !stop.has(w)) {
+            if (w && !stop.has(w) && !/^\d+$/.test(w)) {
                 counts[w] = (counts[w] || 0) + 1;
             }
         });
@@ -366,30 +366,6 @@ safeExecute('single category chart', () => { singleChart = drawSingleCategoryCha
 safeExecute('pairwise heatmap', () => drawPairwiseHeatmap(pairCounts));
 safeExecute('combination chart', () => drawCombinationChart(comboCounts));
 updateWordCloudForData(dataset);
-
-if (singleChart) {
-    let lastCategory = null;
-    const canvas = singleChart.canvas;
-    canvas.addEventListener('mousemove', evt => {
-        const points = singleChart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, true);
-        if (points.length) {
-            const idx = points[0].index;
-            const key = singleChart.data.labels[idx];
-            if (lastCategory !== key) {
-                lastCategory = key;
-                const subset = dataset.filter(row => row[key] === 1);
-                updateWordCloudForData(subset);
-            }
-        } else if (lastCategory !== null) {
-            lastCategory = null;
-            updateWordCloudForData(dataset);
-        }
-    });
-    canvas.addEventListener('mouseleave', () => {
-        lastCategory = null;
-        updateWordCloudForData(dataset);
-    });
-}
 </script>
 </body>
 </html>
