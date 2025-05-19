@@ -157,6 +157,14 @@ buildFilterTable();
 
 const KEYS = CATEGORY_KEYS;
 
+const datasetPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'dataset.js';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Failed to load dataset.js'));
+    document.head.appendChild(script);
+});
+
 function gloss(key) {
     return checkboxLabelMapping[key] || key;
 }
@@ -320,9 +328,6 @@ function drawCombinationChart(combos) {
     });
 }
 
-const singleCounts = countSingleCategories(dataset);
-const pairCounts = countPairwise(dataset);
-const comboCounts = countCombinations(dataset);
 
 function computeWordCounts(data) {
     const stop = new Set(['the','and','to','a','of','it','in','i','that','is','on','for','with','as','are','was','this','but','be','have','has','had','or','an','my','if','me','so','im','you','we','they','he','she','them','his','her','your','their','our','us']);
@@ -357,10 +362,22 @@ function safeExecute(name, fn) {
 }
 
 let singleChart;
-safeExecute('single category chart', () => { singleChart = drawSingleCategoryChart(singleCounts); });
-safeExecute('pairwise heatmap', () => drawPairwiseHeatmap(pairCounts));
-safeExecute('combination chart', () => drawCombinationChart(comboCounts));
-updateWordCloudForData(dataset);
+
+datasetPromise.then(() => {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('charts').style.display = 'block';
+    const singleCounts = countSingleCategories(dataset);
+    const pairCounts = countPairwise(dataset);
+    const comboCounts = countCombinations(dataset);
+    safeExecute('single category chart', () => { singleChart = drawSingleCategoryChart(singleCounts); });
+    safeExecute('pairwise heatmap', () => drawPairwiseHeatmap(pairCounts));
+    safeExecute('combination chart', () => drawCombinationChart(comboCounts));
+    updateWordCloudForData(dataset);
+}).catch(err => {
+    const loading = document.getElementById('loading');
+    if (loading) loading.textContent = 'Error loading dataset: ' + (err.message || err);
+    console.error('Failed to load dataset.js', err);
+});
 </script>
 </div>
 </body>
