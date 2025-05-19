@@ -51,7 +51,7 @@ mark {
     to { transform: rotate(360deg); }
 }
 #wordCloud {
-    width: 500px;
+    width: 100%;
     height: 500px;
     max-width: 100%;
 }
