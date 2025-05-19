@@ -335,8 +335,32 @@ function drawCombinationChart(combos) {
 }
 
 
-const stopWords = new Set(['the','and','to','a','of','it','in','i','that','is','on','for','with','as','are','was','this','but','be','have','has','had','or','an','my','if','me','so','im','you','we','they','he','she','them','his','her','your','their','our','us']);
+const defaultStopWords = [
+  'the','and','to','a','of','it','in','i','that','is','on','for','with','as','are','was',
+  'this','but','be','have','has','had','or','an','my','if','me','so','im','you','we',
+  'they','he','she','them','his','her','your','their','our','us','do','does','did',
+  'at','by','from','here','there','what','who','whom','which','where','when','why',
+  'how','can','could','should','would','shall','will','just','dont','didnt','cant',
+  'wont','about','up','down','out','over','again','more','some','no','yes','not',
+  'very','into','because','also','s','t','m','d','ll','ve','re','person','organization'
+];
+const stopWords = new Set(defaultStopWords);
 let precomputedWordCounts = {};
+
+function buildDynamicStopWords(data, topN = 50) {
+    const counts = {};
+    data.forEach(row => {
+        if (!row.prompt) return;
+        const words = row.prompt.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
+        words.forEach(w => {
+            if (w && !defaultStopWords.includes(w) && !/^\d+$/.test(w)) {
+                counts[w] = (counts[w] || 0) + 1;
+            }
+        });
+    });
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, topN);
+    sorted.forEach(([w]) => stopWords.add(w));
+}
 
 function computeWordCounts(data) {
     const counts = {};
@@ -410,6 +434,7 @@ let singleChart;
 datasetPromise.then(() => {
     document.getElementById('loading').style.display = 'none';
     document.getElementById('charts').style.display = 'block';
+    buildDynamicStopWords(dataset);
     precomputedWordCounts = precomputeWordCountsByCategory(dataset);
     buildWordCloudSelector();
     const singleCounts = countSingleCategories(dataset);
