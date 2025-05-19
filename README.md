@@ -44,13 +44,4 @@ The client page now includes visualizations rendered with Chart.js. After genera
 
 If the charts do not appear, check the browser console for error messages.
 
-## What is EW's technology stack?
 
-EW relies mostly on a few simple Python scripts. The subset generator is a static HTML page powered by JavaScript and Chart.js.
-
-## Roadmap/wishlist
-
-### Subset generator
-* Client-side Javascript version that does not require Python (done)
-* Add more options: "N/A" ? "1 or N/A" ? Better way to organize them?
-* Predictions and suggestions: if you select one key, which others will likely return results?
