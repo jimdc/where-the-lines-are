@@ -27,16 +27,6 @@ Future versions of EW should be able to compare and contrast different datasets.
 
 ## How do I use explore-wrongthink?
 
-### Visualizer
-After cloning, type the following into the console:
-```
-python explore.py combinations
-```
-
-An image will appear like this:
-![Histogram of key combinations.](combinations_histogram.png "Try modifying the code.")
-
-
 ### Subset generator
 First convert the moderation dataset to `dataset.js`:
 ```
@@ -46,27 +36,19 @@ Then open `subset-client.html` in your web browser. Select your desired values a
 
 ![Screenshot of violence+self-harm combination subset of prompts.](EW_example_V+SH.png "Select your desired values and click on 'Generate subset'")
 
+Below is a histogram showing how frequently each label combination appears in the dataset.
+
+![Histogram of key combinations.](combinations_histogram.png "Distribution of label combinations")
+
 
 The client page now includes visualizations rendered with Chart.js. After generating `dataset.js`, open the page to see bar charts of single-category counts, a heatmap of pairwise co-occurrences, and a histogram of key combinations.
 If the charts do not appear, check the browser console for error messages.
 
-### Category analysis
-To compare how frequently each category appears and which combinations are most common, run
-```
-python explore.py analysis
-```
-This prints the counts for each individual category, shows a bar chart of those counts, and renders a heatmap of pairwise co-occurrences.
-
 ## What is EW's technology stack?
 
-EW is organized as a small package of Python modules. It still relies mostly on standard libraries. The visualizer uses `matplotlib.pyplot` and `seaborn`, while the subset generator is a static HTML page powered by JavaScript and Chart.js.
+EW relies mostly on a few simple Python scripts. The subset generator is a static HTML page powered by JavaScript and Chart.js.
 
 ## Roadmap/wishlist
-
-### Visualizer
-* Word cloud for prompt text for a given combination
-* Choose one key and see which other keys combine or don't
-* Show which keys appear most in triple-combos, quadruple-combos, etc.
 
 ### Subset generator
 * Client-side Javascript version that does not require Python (done)
