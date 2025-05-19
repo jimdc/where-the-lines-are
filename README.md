@@ -49,6 +49,13 @@ Paste that URL into your browser and explore the different combinations. For an 
 
 ![Screenshot of violence+self-harm combination subset of prompts.](EW_example_V+SH.png "Select your desired values and click on 'Generate subset'")
 
+### Category analysis
+To compare how frequently each category appears and which combinations are most common, run
+```
+python category_analysis.py
+```
+This prints the counts for each individual category, shows a bar chart of those counts, and renders a heatmap of pairwise co-occurrences.
+
 ## What is EW's technology stack?
 
 These are two self-contained python scripts that mostly use standard libraries like `json`.  The visualizer uses `matplotlib.pyplot` and `seaborn`, and the subset generator uses Flask to generate results and a little bit of JavaScript for bulk setting of radio buttons.
