@@ -1,12 +1,12 @@
 const CACHE_NAME = 'ew-cache-v1';
 const URLS_TO_CACHE = [
-  '/',
-  '/subset-client.html',
-  '/dataset.js',
-  '/styles.css',
-  '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png',
+  './',
+  './index.html',
+  './dataset.js',
+  './static/styles.css',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png',
   'https://cdn.jsdelivr.net/npm/chart.js@3.9.1',
   'https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@1.2.0/dist/chartjs-chart-matrix.min.js',
   'https://cdn.jsdelivr.net/npm/wordcloud@1.1.0/src/wordcloud2.js'
