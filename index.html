@@ -61,12 +61,12 @@
 <h2>Word Cloud</h2>
 <p class="text-muted">Click a word to set the search bar to that term.</p>
 <canvas id="wordCloud" class="mb-4"></canvas>
-<div class="d-flex flex-wrap mb-4">
-  <div class="me-4 mb-3">
+<div id="controlsRow" class="mb-4">
+  <div class="zoom-control">
     <label for="zoomRange" class="form-label">Zoom</label>
     <input type="range" class="form-range" id="zoomRange" min="10" max="200" value="100">
   </div>
-  <form id="filterForm" class="flex-grow-1 mb-3">
+  <form id="filterForm" class="flex-grow-1">
     <div class="table-responsive">
     <table class="table table-bordered table-sm">
         <thead>

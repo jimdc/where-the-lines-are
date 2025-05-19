@@ -67,6 +67,24 @@ mark {
     z-index: 1000;
 }
 
+/* Layout for zoom slider and filter table */
+#controlsRow {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 0.5rem 0;
+}
+@media (min-width: 768px) {
+    #controlsRow {
+        flex-direction: row;
+        align-items: flex-start;
+    }
+}
+.zoom-control {
+    max-width: 260px;
+    margin-bottom: 1rem;
+}
+
 .suggested {
     font-weight: bold;
     color: #007bff;
