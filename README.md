@@ -41,5 +41,8 @@ If the charts do not appear, check the browser console for error messages.
 
 If you open `index.html` directly from your filesystem and the page is stuck on
 "Loading dataset...", your browser is blocking local file requests. Serve the
-directory with a small web server (for example `python3 -m http.server`) or use
-GitHub Pages to view the site.
+directory with a small web server (for example `python3 -m http.server`) and
+then open `http://localhost:8000/` (or the port shown) in your browser, or use
+GitHub Pages to view the site. Using a regular HTTP(S) URL avoids the
+file-protocol restrictions that would otherwise keep "Loading dataset..." on the
+screen.
