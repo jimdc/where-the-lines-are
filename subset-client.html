@@ -29,6 +29,7 @@
 <div class="container my-4">
 <h1>Explore-wrongthink</h1>
 <input type="text" id="searchQuery" class="form-control mb-3" placeholder="Search prompts…">
+<div id="filterSummary" class="mb-3"></div>
 <h2>Word Cloud</h2>
 <div class="mb-2">
   <label for="wordCategorySelect" class="form-label">Word Cloud Category</label>
@@ -179,6 +180,18 @@ function generateSubset(event) {
         const el = document.getElementById(`tri-${cb}`);
         values[cb] = el ? el.dataset.state || 'Any' : 'Any';
     });
+    const summaryParts = [];
+    checkboxes.forEach(cb => {
+        const state = values[cb];
+        if (state !== 'Any') {
+            summaryParts.push(`${cb}: ${state}`);
+        }
+    });
+    if (query) summaryParts.push(`search: "${query}"`);
+    const summaryEl = document.getElementById('filterSummary');
+    if (summaryEl) {
+        summaryEl.textContent = summaryParts.length ? summaryParts.join(', ') : 'No filters applied';
+    }
     updateSuggestionDisplay(values);
     const results = dataset.filter(row => {
         const match = checkboxes.every(key => {
@@ -217,6 +230,13 @@ function generateSubset(event) {
         tr.appendChild(td);
         tbody.appendChild(tr);
     });
+    if (results.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.textContent = 'No results. Try relaxing the filters.';
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+    }
 }
 
 document.getElementById('filterForm').addEventListener('submit', generateSubset);

@@ -44,13 +44,4 @@ Below is a histogram showing how frequently each label combination appears in th
 The client page now includes visualizations rendered with Chart.js. After generating `dataset.js`, open the page to see bar charts of single-category counts, a heatmap of pairwise co-occurrences, and a histogram of key combinations.
 If the charts do not appear, check the browser console for error messages.
 
-## What is EW's technology stack?
 
-EW relies mostly on a few simple Python scripts. The subset generator is a static HTML page powered by JavaScript and Chart.js.
-
-## Roadmap/wishlist
-
-### Subset generator
-* Client-side Javascript version that does not require Python (done)
-* Add more options: "N/A" ? "1 or N/A" ? Better way to organize them?
-* Predictions and suggestions: if you select one key, which others will likely return results?
