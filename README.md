@@ -49,7 +49,10 @@ Paste that URL into your browser and explore the different combinations. For an 
 
 ![Screenshot of violence+self-harm combination subset of prompts.](EW_example_V+SH.png "Select your desired values and click on 'Generate subset'")
 
-You can also use the client-side version. Run `python scripts/jsonl_to_js.py` to create `dataset.js`, then open `subset-client.html` in your browser. When the Flask app is running, visit `/subset-client` to view the same page served through the app. Some browsers block loading local files, so if nothing appears, start a simple HTTP server (e.g. run `python3 -m http.server`) and visit `http://localhost:8000/subset-client.html` instead.
+You can also use the client-side version. Run `python scripts/jsonl_to_js.py` to create `dataset.js`, then open `subset-client.html` directly in your browser. The page works as a standalone HTML file so it can be hosted on GitHub Pages or viewed locally. If your browser blocks loading local files, start a simple HTTP server (e.g. run `python3 -m http.server`) and visit `http://localhost:8000/subset-client.html` instead. When the Flask app is running, visit `/subset-client` to view the same page served through the app. The page now pins Chart.js to version 3 so the matrix plugin loads correctly.
+
+The client page now includes visualizations rendered with Chart.js. After generating `dataset.js`, open the page to see bar charts of single-category counts, a heatmap of pairwise co-occurrences, and a histogram of key combinations.
+If the charts do not appear, check the browser console for error messages.
 
 ### Category analysis
 To compare how frequently each category appears and which combinations are most common, run
