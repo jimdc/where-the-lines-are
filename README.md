@@ -39,13 +39,12 @@ The chart on the left counts prompts for each single category, the heatmap in th
 
 If the charts do not appear, check the browser console for error messages.
 
-If you open `index.html` directly from your filesystem and the page is stuck on
-"Loading dataset...", your browser is blocking local file requests. Serve the
-directory with a small web server (for example `python3 -m http.server`) and
-then open [http://localhost:8000/](http://localhost:8000/) (or the port shown) in your browser, or use
-GitHub Pages to view the site. Using a regular HTTP(S) URL avoids the
-file-protocol restrictions that would otherwise keep "Loading dataset..." on the
-screen. With the updated loader described above, the dataset can also be loaded via the `file://` protocol; if you're using an older loader you must run a local server instead.
+If you open `index.html` directly from your filesystem, the page now loads
+`dataset.js` via a script tag. This avoids the file-protocol restrictions that
+previously kept "Loading dataset..." on the screen. When served over an HTTP(S)
+URL the page instead fetches `dataset.json`. You can still run a local server
+(for example `python3 -m http.server`) if you prefer, but it is no longer
+required for basic usage.
 
 The page also shows loading debug messages directly below the spinner. These now
 include numbered steps (1–5) describing each part of the loading process. If the
