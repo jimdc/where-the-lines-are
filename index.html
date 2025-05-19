@@ -530,6 +530,40 @@ function buildDynamicStopWords(data, topN = 50) {
     sorted.forEach(([w]) => stopWords.add(w));
 }
 
+function buildRefinedStopWords(data, topN = 50) {
+    const info = {};
+    data.forEach(row => {
+        if (!row.prompt) return;
+        const rowCats = KEYS.filter(k => row[k] === 1);
+        const pairSet = new Set();
+        for (let i = 0; i < rowCats.length; i++) {
+            for (let j = i + 1; j < rowCats.length; j++) {
+                pairSet.add(rowCats[i] + '+' + rowCats[j]);
+            }
+        }
+        const words = row.prompt.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
+        words.forEach(w => {
+            if (!w || defaultStopWords.includes(w) || /^\d+$/.test(w)) return;
+            if (!info[w]) info[w] = { count: 0, cats: new Set(), pairs: new Set() };
+            const entry = info[w];
+            entry.count++;
+            rowCats.forEach(c => entry.cats.add(c));
+            pairSet.forEach(p => entry.pairs.add(p));
+        });
+    });
+    const catThreshold = Math.floor(KEYS.length / 2);
+    const pairThreshold = 6;
+    Object.entries(info).forEach(([w, entry]) => {
+        if (entry.cats.size > catThreshold || entry.pairs.size > pairThreshold) {
+            stopWords.add(w);
+        }
+    });
+    Object.entries(info)
+        .sort((a, b) => b[1].count - a[1].count)
+        .slice(0, topN)
+        .forEach(([w]) => stopWords.add(w));
+}
+
 function computeWordCounts(data) {
     const counts = {};
     data.forEach(row => {
@@ -615,7 +649,7 @@ let singleChart;
 datasetPromise.then(() => {
     document.getElementById('loading').style.display = 'none';
     document.getElementById('charts').style.display = 'block';
-    buildDynamicStopWords(dataset);
+    buildRefinedStopWords(dataset);
     precomputedWordCounts = precomputeWordCountsByCategory(dataset);
     buildWordCloudSelector();
     const singleCounts = countSingleCategories(dataset);
