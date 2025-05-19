@@ -70,3 +70,8 @@ mark {
     display: none;
     z-index: 1000;
 }
+
+.suggested {
+    font-weight: bold;
+    color: #007bff;
+}
