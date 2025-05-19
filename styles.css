@@ -21,3 +21,7 @@ th, td {
 .count-link:hover, .pair-link:hover {
     text-decoration: underline;
 }
+
+.suggested {
+    background-color: #fff3cd;
+}

@@ -42,6 +42,7 @@
 </table>
 </div>
 <div id="pairFilters" class="my-2"></div>
+<div id="suggestions" class="my-2"></div>
 <button type="submit" class="btn btn-primary my-2">Generate subset</button>
 </form>
 <h2 id="match-count">0 Matching lines:</h2>
@@ -176,6 +177,7 @@ function generateSubset(event) {
         const el = document.getElementById(`tri-${cb}`);
         values[cb] = el ? el.dataset.state || 'Any' : 'Any';
     });
+    updateSuggestionDisplay(values);
     const results = dataset.filter(row => {
         return checkboxes.every(key => {
             const rowValue = getRowValue(row, key);
@@ -264,6 +266,20 @@ function countPairwise(data) {
     return counts;
 }
 
+function buildSuggestions(pairCounts) {
+    const result = {};
+    KEYS.forEach(k => result[k] = []);
+    Object.entries(pairCounts).forEach(([pair, count]) => {
+        const [a, b] = pair.split('+');
+        result[a].push({ key: b, count });
+        result[b].push({ key: a, count });
+    });
+    KEYS.forEach(k => {
+        result[k].sort((x, y) => y.count - x.count);
+    });
+    return result;
+}
+
 function countCombinations(data) {
     const counts = {};
     data.forEach(row => {
@@ -314,6 +330,33 @@ function showCounts(singleCounts, pairCounts) {
         });
         container.appendChild(btn);
     });
+}
+
+function updateSuggestionDisplay(values) {
+    const container = document.getElementById('suggestions');
+    if (!container) return;
+    document.querySelectorAll('.category-label').forEach(lbl => lbl.classList.remove('suggested'));
+    const included = KEYS.filter(k => values[k] === 'Include');
+    if (included.length === 1 && window.SUGGESTIONS) {
+        const key = included[0];
+        const pairs = window.SUGGESTIONS[key].slice(0, 3);
+        container.textContent = '';
+        if (pairs.length) {
+            const span = document.createElement('span');
+            span.textContent = `Likely with ${key}: `;
+            container.appendChild(span);
+            pairs.forEach((p, idx) => {
+                const lab = document.querySelector(`label[for="tri-${p.key}"]`);
+                if (lab) lab.classList.add('suggested');
+                const text = document.createElement('span');
+                text.textContent = `${p.key} (${p.count})`;
+                container.appendChild(text);
+                if (idx < pairs.length - 1) container.appendChild(document.createTextNode(', '));
+            });
+        }
+    } else {
+        container.textContent = '';
+    }
 }
 
 function drawSingleCategoryChart(counts) {
@@ -538,6 +581,7 @@ datasetPromise.then(() => {
     buildWordCloudSelector();
     const singleCounts = countSingleCategories(dataset);
     const pairCounts = countPairwise(dataset);
+    window.SUGGESTIONS = buildSuggestions(pairCounts);
     const comboCounts = countCombinations(dataset);
     showCounts(singleCounts, pairCounts);
     safeExecute('single category chart', () => { singleChart = drawSingleCategoryChart(singleCounts); });
