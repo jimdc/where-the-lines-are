@@ -34,11 +34,10 @@
     <thead>
         <tr>
             <th>Classification key</th>
-            <th><button type="button" onclick="setAllRadioButtons('0')">Set all values</button> = 0</th>
-            <th><button type="button" onclick="setAllRadioButtons('1')">Set all values</button> = 1</th>
-            <th><button type="button" onclick="setAllRadioButtons('Any')">Set all values</button> = Any</th>
-            <th><button type="button" onclick="setAllRadioButtons('0 or N/A')">Set all values</button> = 0 or N/A</th>
-            <th>Value on last generation</th>
+            <th>0</th>
+            <th>1</th>
+            <th>Any</th>
+            <th>0 or N/A</th>
         </tr>
     </thead>
     <tbody id="filterBody">
@@ -88,15 +87,6 @@ const checkboxLabelMapping = {
 const checkboxes = Object.keys(checkboxLabelMapping);
 const CATEGORY_KEYS = checkboxes.filter(k => k !== 'None');
 
-function setAllRadioButtons(value) {
-    document.querySelectorAll('input[type="radio"]').forEach(radio => {
-        if (radio.value === value) {
-            radio.checked = true;
-        }
-    });
-    generateSubset();
-}
-
 function buildFilterTable() {
     const tbody = document.getElementById('filterBody');
     checkboxes.forEach(cb => {
@@ -106,8 +96,7 @@ function buildFilterTable() {
             `<td><input id="radio-${cb}-0" type="radio" name="radio-${cb}" value="0">0</td>` +
             `<td><input id="radio-${cb}-1" type="radio" name="radio-${cb}" value="1">1</td>` +
             `<td><input id="radio-${cb}-any" type="radio" name="radio-${cb}" value="Any" checked>Any</td>` +
-            `<td><input id="radio-${cb}-na" type="radio" name="radio-${cb}" value="0 or N/A">0 or N/A</td>` +
-            `<td class="last-value">N/A</td>`;
+            `<td><input id="radio-${cb}-na" type="radio" name="radio-${cb}" value="0 or N/A">0 or N/A</td>`;
         tbody.appendChild(tr);
     });
 }
