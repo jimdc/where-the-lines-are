@@ -1,7 +1,7 @@
 {
   "name": "Explore-wrongthink",
   "short_name": "EW",
-  "start_url": "subset-client.html",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#000000",
