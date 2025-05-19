@@ -9,10 +9,21 @@ from collections import Counter
 KEYS = ['S', 'H', 'V', 'HR', 'SH', 'S3', 'H2', 'V2']
 
 
-def load_data(path='samples-1680.jsonl'):
-    """Load the json lines dataset."""
-    with open(path, 'r') as f:
-        return [json.loads(line) for line in f]
+def load_data(path='dataset.js'):
+    """Load dataset from JS file containing a JSON array."""
+    with open(path, 'r', encoding='utf-8') as f:
+        content = f.read().strip()
+
+    # Remove the "const dataset =" prefix if present
+    prefix = 'const dataset ='
+    if content.startswith(prefix):
+        content = content[len(prefix):].strip()
+
+    # Remove the trailing semicolon
+    if content.endswith(';'):
+        content = content[:-1].strip()
+
+    return json.loads(content)
 
 
 def count_single_categories(data):
