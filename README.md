@@ -46,3 +46,7 @@ then open `http://localhost:8000/` (or the port shown) in your browser, or use
 GitHub Pages to view the site. Using a regular HTTP(S) URL avoids the
 file-protocol restrictions that would otherwise keep "Loading dataset..." on the
 screen.
+
+The page also shows loading debug messages directly below the spinner. If the
+dataset fails to load, these messages will include HTTP status codes and other
+details to help diagnose the problem.

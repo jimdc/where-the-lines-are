@@ -27,7 +27,7 @@
 <body>
 <div id="loading">
   <div class="spinner"></div>
-  <div id="loading-text">Loading dataset...</div>
+  <div id="loading-text">Loading dataset... <span class="text-muted">(debug messages below)</span></div>
   <div id="loading-debug" class="text-muted small"></div>
 </div>
 <div class="container my-4">
@@ -369,14 +369,14 @@ setTimeout(() => {
         appendLoadingDebug('Dataset still not loaded after 5s');
         const el = document.getElementById('loading-text');
         if (el && el.textContent.includes('Fetching')) {
-            el.textContent += ' (still loading, check console)';
+            el.textContent += ' (still loading, see debug or console)';
         }
     }
 }, 5000);
 
 setTimeout(() => {
     if (!datasetLoaded) {
-        updateLoadingText('Failed to load dataset. Check console.');
+        updateLoadingText('Failed to load dataset. See debug or console.');
         appendLoadingDebug('Dataset failed to load within 10s');
     }
 }, 10000);
