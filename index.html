@@ -335,6 +335,7 @@ document.getElementById("zoomRange").addEventListener("input", e => {
     currentZoom = e.target.value / 100;
     renderWordCloud(lastWordCounts);
 });
+window.addEventListener('resize', () => renderWordCloud(lastWordCounts));
 const KEYS = CATEGORY_KEYS;
 
 const datasetPromise = new Promise((resolve, reject) => {
@@ -708,6 +709,11 @@ function computeWordCounts(data) {
 function renderWordCloud(counts) {
     const canvas = document.getElementById('wordCloud');
     const tooltip = document.getElementById('wordTooltip');
+    if (canvas) {
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+    }
     const list = Object.entries(counts)
         .filter(([w, c]) => c >= MIN_WORD_FREQ)
         .sort((a, b) => b[1] - a[1]);
