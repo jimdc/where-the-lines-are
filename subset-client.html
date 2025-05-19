@@ -81,9 +81,11 @@ const checkboxLabelMapping = {
     'SH': 'self-harm (SH)',
     'S3': 'sexual/minors (S3)',
     'H2': 'hate/threatening (H2)',
-    'V2': 'violence/graphic (V2)'
+    'V2': 'violence/graphic (V2)',
+    'None': 'no categories flagged'
 };
 const checkboxes = Object.keys(checkboxLabelMapping);
+const CATEGORY_KEYS = checkboxes.filter(k => k !== 'None');
 
 function setAllRadioButtons(value) {
     document.querySelectorAll('input[type="radio"]').forEach(radio => {
@@ -107,6 +109,13 @@ function buildFilterTable() {
     });
 }
 
+function getRowValue(row, key) {
+    if (key === 'None') {
+        return CATEGORY_KEYS.every(k => row[k] === 0) ? '1' : '0';
+    }
+    return row[key] !== undefined ? String(row[key]) : 'N/A';
+}
+
 
 function generateSubset(event) {
     event.preventDefault();
@@ -117,7 +126,7 @@ function generateSubset(event) {
     });
     const results = dataset.filter(row => {
         return checkboxes.every(key => {
-            const rowValue = row[key] !== undefined ? String(row[key]) : 'N/A';
+            const rowValue = getRowValue(row, key);
             const selected = values[key];
             return selected === 'Any' || rowValue === selected ||
                    (selected === '0 or N/A' && (rowValue === '0' || rowValue === 'N/A'));
@@ -127,7 +136,7 @@ function generateSubset(event) {
         const keys1 = [];
         const keysNA = [];
         checkboxes.forEach(key => {
-            const rowValue = row[key] !== undefined ? String(row[key]) : 'N/A';
+            const rowValue = getRowValue(row, key);
             if (rowValue === '0') keys0.push(checkboxLabelMapping[key]);
             else if (rowValue === '1') keys1.push(checkboxLabelMapping[key]);
             else keysNA.push(checkboxLabelMapping[key]);
@@ -148,7 +157,7 @@ function generateSubset(event) {
 document.getElementById('filterForm').addEventListener('submit', generateSubset);
 buildFilterTable();
 
-const KEYS = Object.keys(checkboxLabelMapping);
+const KEYS = CATEGORY_KEYS;
 
 function gloss(key) {
     return checkboxLabelMapping[key] || key;
