@@ -15,6 +15,8 @@
             word-wrap: break-word;
         }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@1.2.0/dist/chartjs-chart-matrix.min.js"></script>
 </head>
 <body>
 <h1>Explore-wrongthink</h1>
@@ -48,6 +50,12 @@
     <tbody>
     </tbody>
 </table>
+<h2>Single category counts</h2>
+<canvas id="singleChart"></canvas>
+<h2>Pairwise co-occurrences</h2>
+<canvas id="pairwiseChart"></canvas>
+<h2>Key combination frequencies</h2>
+<canvas id="comboChart"></canvas>
 <script src="dataset.js"></script>
 <script>
 const checkboxLabelMapping = {
@@ -124,6 +132,149 @@ function generateSubset(event) {
 
 document.getElementById('filterForm').addEventListener('submit', generateSubset);
 buildFilterTable();
+
+const KEYS = Object.keys(checkboxLabelMapping);
+
+function countSingleCategories(data) {
+    const counts = {};
+    KEYS.forEach(k => counts[k] = 0);
+    data.forEach(row => {
+        KEYS.forEach(k => {
+            if (row[k] === 1) counts[k]++;
+        });
+    });
+    return counts;
+}
+
+function countPairwise(data) {
+    const counts = {};
+    for (let i = 0; i < KEYS.length; i++) {
+        for (let j = i + 1; j < KEYS.length; j++) {
+            const pair = KEYS[i] + '+' + KEYS[j];
+            counts[pair] = 0;
+        }
+    }
+    data.forEach(row => {
+        for (let i = 0; i < KEYS.length; i++) {
+            for (let j = i + 1; j < KEYS.length; j++) {
+                if (row[KEYS[i]] === 1 && row[KEYS[j]] === 1) {
+                    const pair = KEYS[i] + '+' + KEYS[j];
+                    counts[pair] = (counts[pair] || 0) + 1;
+                }
+            }
+        }
+    });
+    return counts;
+}
+
+function countCombinations(data) {
+    const counts = {};
+    data.forEach(row => {
+        const keys1 = KEYS.filter(k => row[k] === 1).sort();
+        const combo = keys1.join('+') || 'none';
+        counts[combo] = (counts[combo] || 0) + 1;
+    });
+    return counts;
+}
+
+function drawSingleCategoryChart(counts) {
+    const labels = KEYS;
+    const values = labels.map(k => counts[k] || 0);
+    new Chart(document.getElementById('singleChart'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Count',
+                data: values,
+                backgroundColor: 'rgba(75, 192, 192, 0.6)'
+            }]
+        },
+        options: {
+            scales: {
+                y: { beginAtZero: true }
+            },
+            plugins: { legend: { display: false } }
+        }
+    });
+}
+
+function drawPairwiseHeatmap(pairCounts) {
+    const data = [];
+    let max = 0;
+    for (let i = 0; i < KEYS.length; i++) {
+        for (let j = 0; j < KEYS.length; j++) {
+            let value = 0;
+            if (i !== j) {
+                const pair = i < j ? KEYS[i] + '+' + KEYS[j] : KEYS[j] + '+' + KEYS[i];
+                value = pairCounts[pair] || 0;
+            }
+            max = Math.max(max, value);
+            data.push({ x: j, y: i, v: value });
+        }
+    }
+    const ctx = document.getElementById('pairwiseChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'matrix',
+        data: { datasets: [{
+            label: 'Pairs',
+            data: data,
+            backgroundColor: ctx => {
+                const v = ctx.dataset.data[ctx.dataIndex].v;
+                const alpha = max ? v / max : 0;
+                return `rgba(0, 123, 255, ${alpha})`;
+            },
+            width: ({chart}) => (chart.chartArea.width / KEYS.length) - 1,
+            height: ({chart}) => (chart.chartArea.height / KEYS.length) - 1
+        }] },
+        options: {
+            scales: {
+                x: { type: 'category', labels: KEYS, position: 'top' },
+                y: { type: 'category', labels: KEYS, reverse: true }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: items => {
+                            const d = items[0].raw;
+                            return `${KEYS[d.y]} + ${KEYS[d.x]}`;
+                        },
+                        label: item => `Count: ${item.raw.v}`
+                    }
+                }
+            }
+        }
+    });
+}
+
+function drawCombinationChart(combos) {
+    const sorted = Object.entries(combos).sort((a, b) => b[1] - a[1]);
+    const labels = sorted.map(x => x[0]);
+    const values = sorted.map(x => x[1]);
+    new Chart(document.getElementById('comboChart'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Frequency',
+                data: values,
+                backgroundColor: 'rgba(153, 102, 255, 0.6)'
+            }]
+        },
+        options: {
+            scales: { x: { ticks: { autoSkip: false } }, y: { beginAtZero: true } },
+            plugins: { legend: { display: false } }
+        }
+    });
+}
+
+const singleCounts = countSingleCategories(dataset);
+const pairCounts = countPairwise(dataset);
+const comboCounts = countCombinations(dataset);
+drawSingleCategoryChart(singleCounts);
+drawPairwiseHeatmap(pairCounts);
+drawCombinationChart(comboCounts);
 </script>
 </body>
 </html>
