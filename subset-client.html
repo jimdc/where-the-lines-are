@@ -379,6 +379,12 @@ datasetPromise.then(() => {
     console.error('Failed to load dataset.js', err);
 });
 </script>
-</div>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js');
+  });
+}
+</script>
 </body>
 </html>
