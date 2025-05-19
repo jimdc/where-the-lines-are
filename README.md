@@ -38,14 +38,11 @@ An image will appear like this:
 
 
 ### Subset generator
-To start the prompt filter program in the console,
+First convert the moderation dataset to `dataset.js`:
 ```
-python explore.py subset
+python scripts/jsonl_to_js.py --input samples-1680.jsonl --output dataset.js
 ```
-
-And then it will show an output like `Running on http://127.0.0.1:5000`.
-
-Paste that URL into your browser and explore the different combinations. For an example, an input of "V" (violence) + "SH" (self-harm) parameters as 1, with all others being 0, gives two prompts:
+Then open `subset-client.html` in your web browser. Select your desired values and click **Generate subset**. For example, an input of "V" (violence) + "SH" (self-harm) parameters as 1, with all others being 0, gives two prompts:
 
 ![Screenshot of violence+self-harm combination subset of prompts.](EW_example_V+SH.png "Select your desired values and click on 'Generate subset'")
 
@@ -62,7 +59,7 @@ This prints the counts for each individual category, shows a bar chart of those 
 
 ## What is EW's technology stack?
 
-EW is now organized as a small package of Python modules. It still relies mostly on standard libraries. The visualizer uses `matplotlib.pyplot` and `seaborn`, and the subset generator uses Flask plus a little JavaScript for bulk radio-button controls.
+EW is organized as a small package of Python modules. It still relies mostly on standard libraries. The visualizer uses `matplotlib.pyplot` and `seaborn`, while the subset generator is a static HTML page powered by JavaScript and Chart.js.
 
 ## Roadmap/wishlist
 
