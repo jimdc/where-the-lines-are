@@ -25,7 +25,11 @@
     </script>
 </head>
 <body>
-<div id="loading"><div class="spinner"></div>Loading dataset...</div>
+<div id="loading">
+  <div class="spinner"></div>
+  <div id="loading-text">Loading dataset...</div>
+  <div id="loading-debug" class="text-muted small"></div>
+</div>
 <div class="container my-4">
 <h1>Explore-wrongthink</h1>
 <p class="text-danger">Contains potentially disturbing text.</p>
@@ -109,6 +113,22 @@ const checkboxLabelMapping = {
     'V2': 'violence/graphic (V2)',
     'None': 'no categories flagged'
 };
+
+function updateLoadingText(msg) {
+    const el = document.getElementById('loading-text');
+    if (el) el.textContent = msg;
+}
+
+function appendLoadingDebug(msg) {
+    const el = document.getElementById('loading-debug');
+    if (el) {
+        const div = document.createElement('div');
+        div.className = 'debug-msg';
+        div.textContent = msg;
+        el.appendChild(div);
+    }
+    console.log(msg);
+}
 const checkboxDefinitionMapping = {
     'S': 'Content meant to arouse sexual excitement, such as the description of sexual activity, or that promotes sexual services (excluding sex education and wellness).',
     'H': 'Content that expresses, incites, or promotes hate based on race, gender, ethnicity, religion, nationality, sexual orientation, disability status, or caste.',
@@ -316,29 +336,29 @@ const KEYS = CATEGORY_KEYS;
 
 const datasetPromise = new Promise((resolve, reject) => {
     console.log('Initializing dataset load');
-    const loading = document.getElementById('loading');
-    if (loading) loading.textContent = 'Fetching dataset...';
+    updateLoadingText('Fetching dataset...');
+    appendLoadingDebug('datasetPromise started');
 
     window.datasetResolve = () => {
-        console.log('Dataset loaded');
+        appendLoadingDebug('Dataset loaded');
         resolve();
     };
     window.datasetReject = err => {
-        console.error('dataset.json failed to load', err);
+        appendLoadingDebug('Dataset load failed: ' + (err && err.message));
         reject(new Error('Failed to load dataset.json'));
     };
 
     const script = document.createElement('script');
     script.src = 'dataset-loader.js';
     script.onload = () => {
-        console.log('dataset-loader.js onload fired');
+        appendLoadingDebug('dataset-loader.js loaded');
     };
     script.onerror = err => {
-        console.error('dataset-loader.js failed to load', err);
+        appendLoadingDebug('dataset-loader.js failed to load');
         reject(new Error('Failed to load dataset-loader.js'));
     };
     document.head.appendChild(script);
-    console.log('dataset-loader.js script appended');
+    appendLoadingDebug('dataset-loader.js script appended');
 });
 
 let datasetLoaded = false;
@@ -346,19 +366,18 @@ datasetPromise.then(() => { datasetLoaded = true; });
 
 setTimeout(() => {
     if (!datasetLoaded) {
-        const loading = document.getElementById('loading');
-        if (loading && loading.textContent.includes('Fetching')) {
-            loading.textContent += ' (still loading, check console)';
+        appendLoadingDebug('Dataset still not loaded after 5s');
+        const el = document.getElementById('loading-text');
+        if (el && el.textContent.includes('Fetching')) {
+            el.textContent += ' (still loading, check console)';
         }
-        console.warn('Dataset still not loaded after 5s');
     }
 }, 5000);
 
 setTimeout(() => {
     if (!datasetLoaded) {
-        const loading = document.getElementById('loading');
-        if (loading) loading.textContent = 'Failed to load dataset. Check console.';
-        console.error('Dataset failed to load within 10s');
+        updateLoadingText('Failed to load dataset. Check console.');
+        appendLoadingDebug('Dataset failed to load within 10s');
     }
 }, 10000);
 
@@ -735,11 +754,13 @@ let lastWordCounts = {};
 const MIN_WORD_FREQ = 3;
 
 datasetPromise.then(() => {
-    const loading = document.getElementById('loading');
-    if (loading) loading.textContent = `Processing ${Array.isArray(dataset) ? dataset.length : '?'} prompts...`;
+    updateLoadingText(`Processing ${Array.isArray(dataset) ? dataset.length : '?' } prompts...`);
     // allow DOM update before heavy work
     setTimeout(() => {
+        const loading = document.getElementById('loading');
         if (loading) loading.style.display = 'none';
+        const debugEl = document.getElementById('loading-debug');
+        if (debugEl) debugEl.innerHTML = '';
         document.getElementById('charts').style.display = 'block';
         buildDynamicStopWords(dataset);
         const singleCounts = countSingleCategories(dataset);
@@ -753,9 +774,8 @@ datasetPromise.then(() => {
         generateSubset();
     }, 10);
 }).catch(err => {
-    const loading = document.getElementById('loading');
-    if (loading) loading.textContent = 'Error loading dataset: ' + (err.message || err);
-    console.error('Failed to load dataset', err);
+    updateLoadingText('Error loading dataset: ' + (err.message || err));
+    appendLoadingDebug('Failed to load dataset: ' + (err.message || err));
 });
 </script>
 <script>
