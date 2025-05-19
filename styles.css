@@ -8,3 +8,7 @@ table {
 th, td {
     word-wrap: break-word;
 }
+
+.category-label {
+    cursor: pointer;
+}
