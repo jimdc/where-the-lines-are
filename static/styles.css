@@ -1,0 +1,24 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto&display=swap');
+body {
+    font-family: 'Roboto', Arial, sans-serif;
+    padding: 1rem;
+}
+h1, h2 {
+    text-align: center;
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+}
+table {
+    width: 100%;
+    table-layout: fixed;
+    word-wrap: break-word;
+}
+canvas {
+    max-width: 100%;
+    height: auto;
+}
+@media (max-width: 576px) {
+    table {
+        font-size: 0.85rem;
+    }
+}

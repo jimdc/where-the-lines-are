@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <title>Explore-wrongthink</title>
-    <meta name="theme-color" content="#000000">
-    <link rel="manifest" href="manifest.json">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="static/styles.css">
     <!-- Pin Chart.js to a version compatible with the matrix plugin -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@1.2.0/dist/chartjs-chart-matrix.min.js"></script>
@@ -26,10 +25,11 @@
     </script>
 </head>
 <body>
-<div id="loading"><div class="spinner"></div>Loading dataset...</div>
+<div class="container my-4">
 <h1>Explore-wrongthink</h1>
-<form id="filterForm">
-<table border="1">
+<form id="filterForm" class="mb-4">
+<div class="table-responsive">
+<table class="table table-bordered table-sm">
     <thead>
         <tr>
             <th>Classification key</th>
@@ -43,10 +43,12 @@
     <tbody id="filterBody">
     </tbody>
 </table>
-<br><input type="submit" value="Generate subset" style="font-size:18px;padding:10px;">
+</div>
+<button type="submit" class="btn btn-primary my-2">Generate subset</button>
 </form>
 <h2 id="match-count">0 Matching lines:</h2>
-<table border="1" id="results">
+<div class="table-responsive">
+<table class="table table-bordered table-sm" id="results">
     <thead>
         <tr>
             <th>Prompt</th>
@@ -56,9 +58,9 @@
         </tr>
     </thead>
     <tbody>
-    </tbody>
+</tbody>
 </table>
-<div id="charts" style="display:none">
+</div>
 <h2>Single category counts</h2>
 <canvas id="singleChart"></canvas>
 <h2>Pairwise co-occurrences</h2>
@@ -66,8 +68,8 @@
 <h2>Key combination frequencies</h2>
 <canvas id="comboChart"></canvas>
 <h2>Word Cloud</h2>
-<canvas id="wordCloud" width="800" height="400"></canvas>
-</div>
+<canvas id="wordCloud"></canvas>
+<script src="dataset.js"></script>
 <script>
 const checkboxLabelMapping = {
     'S': 'sexual (S)',
