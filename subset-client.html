@@ -122,7 +122,9 @@ function getRowValue(row, key) {
 
 
 function generateSubset(event) {
-    event.preventDefault();
+    if (event) {
+        event.preventDefault();
+    }
     const formData = new FormData(document.getElementById('filterForm'));
     const values = {};
     checkboxes.forEach(cb => {
@@ -160,6 +162,7 @@ function generateSubset(event) {
 
 document.getElementById('filterForm').addEventListener('submit', generateSubset);
 buildFilterTable();
+document.getElementById('filterForm').addEventListener('change', generateSubset);
 
 const KEYS = CATEGORY_KEYS;
 
@@ -444,6 +447,7 @@ datasetPromise.then(() => {
     safeExecute('pairwise heatmap', () => drawPairwiseHeatmap(pairCounts));
     safeExecute('combination chart', () => drawCombinationChart(comboCounts));
     updateWordCloudForCategory('All');
+    generateSubset();
 }).catch(err => {
     const loading = document.getElementById('loading');
     if (loading) loading.textContent = 'Error loading dataset: ' + (err.message || err);

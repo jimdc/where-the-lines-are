@@ -32,9 +32,9 @@ First convert the moderation dataset to `dataset.js`:
 ```
 python scripts/jsonl_to_js.py --input samples-1680.jsonl --output dataset.js
 ```
-Then open `subset-client.html` in your web browser. Select your desired values and click **Generate subset**. For example, an input of "V" (violence) + "SH" (self-harm) parameters as 1, with all others being 0, gives two prompts:
+Then open `subset-client.html` in your web browser. Select your desired values—results update automatically whenever you change a classification option. For example, an input of "V" (violence) + "SH" (self-harm) parameters as 1, with all others being 0, gives two prompts:
 
-![Screenshot of violence+self-harm combination subset of prompts.](EW_example_V+SH.png "Select your desired values and click on 'Generate subset'")
+![Screenshot of violence+self-harm combination subset of prompts.](EW_example_V+SH.png "Results update automatically when you change classifications")
 
 Below is a histogram showing how frequently each label combination appears in the dataset.
 
