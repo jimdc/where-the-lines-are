@@ -754,7 +754,23 @@ let lastWordCounts = {};
 const MIN_WORD_FREQ = 3;
 
 datasetPromise.then(() => {
-    updateLoadingText(`Processing ${Array.isArray(dataset) ? dataset.length : '?' } prompts...`);
+    const container = document.querySelector('.container.my-4');
+    const isEmpty = Array.isArray(dataset) && dataset.length === 0;
+    const msgId = 'no-data-message';
+    if (isEmpty) {
+        updateLoadingText('No data found in dataset.json');
+        if (container && !document.getElementById(msgId)) {
+            const msg = document.createElement('div');
+            msg.id = msgId;
+            msg.className = 'alert alert-warning my-3';
+            msg.textContent = 'No data found in dataset.json';
+            container.insertBefore(msg, container.firstChild);
+        }
+    } else {
+        updateLoadingText(`Processing ${Array.isArray(dataset) ? dataset.length : '?' } prompts...`);
+        const old = document.getElementById(msgId);
+        if (old) old.remove();
+    }
     // allow DOM update before heavy work
     setTimeout(() => {
         const loading = document.getElementById('loading');
