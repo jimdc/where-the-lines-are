@@ -12,3 +12,12 @@ th, td {
 .category-label {
     cursor: pointer;
 }
+
+.count-link, .pair-link {
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.count-link:hover, .pair-link:hover {
+    text-decoration: underline;
+}

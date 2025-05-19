@@ -41,6 +41,7 @@
     </tbody>
 </table>
 </div>
+<div id="pairFilters" class="my-2"></div>
 <button type="submit" class="btn btn-primary my-2">Generate subset</button>
 </form>
 <h2 id="match-count">0 Matching lines:</h2>
@@ -89,7 +90,8 @@ function buildFilterTable() {
     checkboxes.forEach(cb => {
         const tr = document.createElement('tr');
         tr.innerHTML =
-            `<td><label for="tri-${cb}" class="category-label">${checkboxLabelMapping[cb]}</label></td>` +
+            `<td><label for="tri-${cb}" class="category-label">${checkboxLabelMapping[cb]}</label> ` +
+            `<a href="#" id="count-${cb}" class="count-link small ms-1"></a></td>` +
             `<td><input id="tri-${cb}" type="checkbox" class="tristate" data-state="Any"><span class="ms-1 state-label" id="tri-${cb}-label">Any</span></td>`;
         tbody.appendChild(tr);
     });
@@ -126,6 +128,35 @@ function initTriState(input) {
     });
 
     update();
+}
+
+function updateTriStateDisplay(input) {
+    const label = document.getElementById(`${input.id}-label`);
+    const state = input.dataset.state;
+    if (state === 'Include') {
+        input.checked = true;
+        input.indeterminate = false;
+        if (label) label.textContent = 'Include';
+    } else if (state === 'Exclude') {
+        input.checked = false;
+        input.indeterminate = false;
+        if (label) label.textContent = 'Exclude';
+    } else {
+        input.checked = false;
+        input.indeterminate = true;
+        if (label) label.textContent = 'Any';
+    }
+}
+
+function setTriState(key, state) {
+    const input = document.getElementById(`tri-${key}`);
+    if (!input) return;
+    input.dataset.state = state;
+    updateTriStateDisplay(input);
+}
+
+function resetTriStates() {
+    checkboxes.forEach(cb => setTriState(cb, 'Any'));
 }
 
 function getRowValue(row, key) {
@@ -241,6 +272,48 @@ function countCombinations(data) {
         counts[combo] = (counts[combo] || 0) + 1;
     });
     return counts;
+}
+
+function showCounts(singleCounts, pairCounts) {
+    KEYS.forEach(k => {
+        const el = document.getElementById(`count-${k}`);
+        if (!el) return;
+        const count = singleCounts[k] || 0;
+        el.textContent = `(${count})`;
+        el.addEventListener('click', e => {
+            e.preventDefault();
+            resetTriStates();
+            setTriState(k, 'Include');
+            document.getElementById('filterForm').dispatchEvent(new Event('change'));
+        });
+    });
+
+    const container = document.getElementById('pairFilters');
+    if (!container) return;
+    const pairs = Object.entries(pairCounts)
+        .filter(([, c]) => c > 0)
+        .sort((a, b) => b[1] - a[1]);
+    container.textContent = '';
+    if (pairs.length) {
+        const label = document.createElement('span');
+        label.textContent = 'Common pairs: ';
+        container.appendChild(label);
+    }
+    pairs.forEach(([pair, count], idx) => {
+        const btn = document.createElement('a');
+        btn.href = '#';
+        btn.className = 'pair-link me-2';
+        btn.textContent = `${pair} (${count})`;
+        btn.addEventListener('click', e => {
+            e.preventDefault();
+            const [k1, k2] = pair.split('+');
+            resetTriStates();
+            setTriState(k1, 'Include');
+            setTriState(k2, 'Include');
+            document.getElementById('filterForm').dispatchEvent(new Event('change'));
+        });
+        container.appendChild(btn);
+    });
 }
 
 function drawSingleCategoryChart(counts) {
@@ -466,6 +539,7 @@ datasetPromise.then(() => {
     const singleCounts = countSingleCategories(dataset);
     const pairCounts = countPairwise(dataset);
     const comboCounts = countCombinations(dataset);
+    showCounts(singleCounts, pairCounts);
     safeExecute('single category chart', () => { singleChart = drawSingleCategoryChart(singleCounts); });
     safeExecute('pairwise heatmap', () => drawPairwiseHeatmap(pairCounts));
     safeExecute('combination chart', () => drawCombinationChart(comboCounts));
