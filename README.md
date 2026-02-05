@@ -1,59 +1,39 @@
 # Explore-wrongthink
 
-## What is Explore-wrongthink?
+**Content warning**: this tool displays real-world text that was flagged as harmful. Expect shocking language.
 
-Explore-wrongthink (EW) is a toolset for visualizing and analyzing prompt-classification datasets used in language model safety research.
+## What is this?
 
-It allows users to examine prompt examples that fall into zero or more of eight categories:
+Explore-wrongthink is a visualization tool for studying how content moderation categories overlap, co-occur, and cluster in real prompt data. It treats a classification dataset not as a lookup table but as a structure worth seeing — a place where patterns in how humans produce harmful text become visible through careful graphic design.
 
-| Category | Label | Definition |
-| -------- | ----- | ---------- |
-| sexual   | `S`   | Content meant to arouse sexual excitement, such as the description of sexual activity, or that promotes sexual services (excluding sex education and wellness). |
-| hate     | `H`   | Content that expresses, incites, or promotes hate based on race, gender, ethnicity, religion, nationality, sexual orientation, disability status, or caste. |
-| violence | `V`   | Content that promotes or glorifies violence or celebrates the suffering or humiliation of others. |
-| harassment       | `HR`   | Content that may be used to torment or annoy individuals in real life, or make harassment more likely to occur. |
-| self-harm        | `SH`   | Content that promotes, encourages, or depicts acts of self-harm, such as suicide, cutting, and eating disorders. |
-| sexual/minors    | `S3`   | Sexual content that includes an individual who is under 18 years old. |
-| hate/threatening | `H2`   | Hateful content that also includes violence or serious harm towards the targeted group. |
-| violence/graphic | `V2`   | Violent content that depicts death, violence, or serious physical injury in extreme graphic detail. |
+The interface follows Edward Tufte's principles from *The Visual Display of Quantitative Information*: maximize data density, eliminate chartjunk, label everything directly, and let the data speak through its structure rather than through decoration. Every pixel either carries data or gets out of the way.
 
-**Content warning**: shocking text.
+## What can you discover?
+
+The eight moderation categories are not independent. The visualizations expose their hidden geometry:
+
+**Some categories never travel alone.** The exclusivity chart reveals that sexual/minors, hate/threatening, and violence/graphic are *never* flagged in isolation — they appear only when a parent category (sexual, hate, or violence) is also flagged. Self-harm, by contrast, is 92% exclusive: almost every self-harm prompt is *only* about self-harm. This tells you something about the taxonomy itself — the subcategories are strict refinements, while self-harm occupies its own semantic space.
+
+**Violence is the connective tissue of harm.** The co-occurrence matrix shows that violence co-occurs with nearly every other category: 40 prompts share violence + hate, 37 share violence + hate/threatening, 24 share violence + violence/graphic. Click the violence row and the word frequencies shift to "kill," "destroy," "war" — words that bridge hate speech into threatened action. Sexual content, meanwhile, barely touches violence (8 co-occurrences) or hate (2). These categories live in different neighborhoods.
+
+**Word distributions reveal category boundaries.** Click "kill" in the word frequency strip and the breakdown panel shows it appears in 27 prompts — 100% flagged for violence, 67% for hate, 63% for hate/threatening, but only 4% for sexual. Click "fuck" and the profile inverts: it spreads across sexual, harassment, and hate roughly equally. The proportional bars make these signatures immediately comparable.
+
+**Rare combinations are the most informative.** The surprise metric sorts prompts by the rarity of their category combination. The most surprising prompts — those flagged "unique" — carry combinations like hate + violence + hate/threatening + violence/graphic that appear nowhere else in the dataset. These edge cases reveal where the category boundaries blur and where annotators were forced to make judgment calls across multiple dimensions simultaneously.
+
+**The binary matrix shows population structure.** The prompt bitmap renders every row of data as a thin strip of dark and light cells. Viewed in aggregate, vertical dark bands show which categories dominate; horizontal patterns reveal clusters of similarly-classified prompts; and scattered dark cells in otherwise light rows mark the outliers. It is 2,400 data points in a glance — the kind of density that makes large-N patterns visible without summarization.
 
 ## Where does the data come from?
 
-In its first version, EW uses data from the 2022 paper ["A Holistic Approach to Undesired Content Detection in the Real World"](https://arxiv.org/abs/2208.03274). Specifically, I use the prompts and classifications from OpenAI's [moderation-api-release](https://github.com/openai/moderation-api-release/tree/main).
+The dataset comes from the 2022 paper ["A Holistic Approach to Undesired Content Detection in the Real World"](https://arxiv.org/abs/2208.03274), specifically the prompts and classifications from OpenAI's [moderation-api-release](https://github.com/openai/moderation-api-release/tree/main). It contains 1,680 prompts classified across 8 categories.
 
-Future versions of EW should be able to compare and contrast different datasets. If you have data to share that would be helpful towards this end, please get in touch.
+Future versions should be able to compare and contrast different classification datasets. If you have data to share, please get in touch.
 
-## How do I use explore-wrongthink?
+## Design
 
-Open `index.html` in your web browser. Select your desired values—results update automatically whenever you change a classification option. Use the search box at the top to filter prompts by keyword. For example, an input of "V" (violence) + "SH" (self-harm) parameters as 1, with all others being 0, gives two prompts:
+The visualizations apply Tufte's principles throughout: high data-ink ratio, direct labeling, small multiples, data-text integration, grayscale palette, and zero external dependencies. Every chart is rendered in purpose-built canvas code with no frameworks.
 
-![Screenshot of current search interface.](EW-bone+v+v2-search-example.png "Results update automatically when you change classifications")
+See [principles.md](principles.md) for the full design rationale with specific Tufte page citations.
 
-*(Screenshot from the current UI.)*
+## Usage
 
-The chart on the left counts prompts for each single category, the heatmap in the middle shows how often pairs of categories appear together (brighter squares indicate more co-occurrences), and the histogram on the right counts how frequently each set of category keys occurs.
-
-![Charts of single-category counts, pairwise co-occurrences, and key combination frequencies.](category-graphs.png "Single-category counts, pairwise co-occurrences, and key combination frequencies")
-
-If the charts do not appear, check the browser console for error messages.
-
-If you open `index.html` directly from your filesystem, the page now loads
-`dataset.js` via a script tag. This avoids the file-protocol restrictions that
-previously kept "Loading dataset..." on the screen. When served over an HTTP(S)
-URL the page instead fetches `dataset.json`. You can still run a local server
-(for example `python3 -m http.server`) if you prefer, but it is no longer
-required for basic usage.
-
-The page also shows loading debug messages directly below the spinner. These now
-include numbered steps (1–5) describing each part of the loading process. If the
-dataset fails to load, these messages will show exactly which step failed along
-with HTTP status codes and other details to help diagnose the problem.
-
-## Clearing an outdated cache
-
-If you previously loaded the page, your browser may still hold an old
-service-worker cache. Open your browser's developer tools, go to the
-"Application" panel, and clear the stored caches or unregister the service
-worker. Reload the page afterward so the new `ew-cache-v2` files are cached.
+Open `index.html` in a browser. Everything updates reactively — click a category, click a matrix cell, click a word, type a search, toggle a pill. No server required (though `python3 -m http.server` works if you prefer HTTP).
