@@ -9,6 +9,8 @@ Usage:
     python scripts/preprocess.py openai        # reformat existing data
     python scripts/preprocess.py beavertails   # download + normalize
     python scripts/preprocess.py aegis         # download + normalize
+    python scripts/preprocess.py jigsaw        # download + normalize
+    python scripts/preprocess.py saferlhf      # download + normalize
     python scripts/preprocess.py registry      # generate registry.json + .js
     python scripts/preprocess.py all           # run all of the above
 """
@@ -257,12 +259,179 @@ def process_aegis():
     write_json_and_js('aegis', data)
 
 
+def process_jigsaw():
+    """Download and normalize Jigsaw Toxic Comment Classification dataset."""
+    print('Processing Jigsaw Toxic Comment Classification dataset...')
+    from datasets import load_dataset
+
+    print('  Downloading from HuggingFace (Arsive/toxicity_classification_jigsaw)...')
+    # The labeled data is split across 'train' and 'validation'; 'test' has -1 labels
+    from datasets import concatenate_datasets
+    ds_train = load_dataset('Arsive/toxicity_classification_jigsaw', split='train')
+    ds_val = load_dataset('Arsive/toxicity_classification_jigsaw', split='validation')
+    ds = concatenate_datasets([ds_train, ds_val])
+    print(f'  Downloaded {len(ds)} rows (train={len(ds_train)}, val={len(ds_val)})')
+
+    sample = ds[0]
+    print(f'  Sample keys: {list(sample.keys())}')
+
+    # Jigsaw has 6 binary columns natively: toxic, severe_toxic, obscene, threat, insult, identity_hate
+    # Map to short keys
+    CAT_MAP = {
+        'toxic': 'TX',
+        'severe_toxic': 'ST',
+        'obscene': 'OB',
+        'threat': 'TH',
+        'insult': 'IN',
+        'identity_hate': 'IH',
+    }
+
+    all_keys = sorted(CAT_MAP.values())
+    data = []
+    skipped = 0
+
+    for i, row in enumerate(ds):
+        text = row.get('comment_text', '')
+        if not text or not text.strip():
+            skipped += 1
+            continue
+
+        entry = {'comment': text.strip()}
+        for orig_key, short_key in CAT_MAP.items():
+            entry[short_key] = 1 if row.get(orig_key, 0) else 0
+
+        data.append(entry)
+
+        if (i + 1) % 50000 == 0:
+            print(f'  Processed {i + 1} rows...')
+
+    print(f'  Final: {len(data)} rows ({skipped} skipped)')
+    write_json_and_js('jigsaw', data)
+
+
+def process_saferlhf():
+    """Download and normalize PKU-SafeRLHF dataset."""
+    print('Processing PKU-SafeRLHF dataset...')
+    from datasets import load_dataset
+
+    print('  Downloading from HuggingFace (PKU-Alignment/PKU-SafeRLHF)...')
+    ds = load_dataset('PKU-Alignment/PKU-SafeRLHF', split='train')
+    print(f'  Downloaded {len(ds)} rows')
+
+    sample = ds[0]
+    print(f'  Sample keys: {list(sample.keys())}')
+
+    # SafeRLHF has response_0_harm_category and response_1_harm_category dicts
+    # with 19 boolean keys each. We use response_0 categories (primary response).
+    # Each row is a prompt with two responses — we classify by the LESS safe response
+    # to capture the broadest category coverage per prompt.
+
+    # 19 category mapping
+    CAT_MAP = {
+        'Animal Abuse': 'AB',
+        'Copyright Issues': 'CI',
+        'Cybercrime': 'CC',
+        'Discriminatory Behavior': 'DB',
+        'Disrupting Public Order': 'PO',
+        'Drugs': 'DR',
+        'Economic Crime': 'EC',
+        'Endangering National Security': 'NS',
+        'Endangering Public Health': 'PH',
+        'Environmental Damage': 'ED',
+        'Human Trafficking': 'HT',
+        'Insulting Behavior': 'IB',
+        'Mental Manipulation': 'MM',
+        'Physical Harm': 'PY',
+        'Privacy Violation': 'PV',
+        'Psychological Harm': 'PS',
+        'Sexual Content': 'SX',
+        'Violence': 'VL',
+        'White-Collar Crime': 'WC',
+    }
+
+    all_keys = sorted(CAT_MAP.values())
+    data = []
+    skipped = 0
+    seen_prompts = set()  # deduplicate prompts
+
+    for i, row in enumerate(ds):
+        prompt = row.get('prompt', '')
+        if not prompt or not prompt.strip():
+            skipped += 1
+            continue
+
+        prompt_clean = prompt.strip()
+
+        # Deduplicate: same prompt can appear multiple times with different responses
+        # Merge categories across all appearances (union of harm flags)
+        prompt_hash = hash(prompt_clean)
+        if prompt_hash in seen_prompts:
+            # Find existing entry and merge
+            for existing in reversed(data):
+                if existing['prompt'] == prompt_clean:
+                    # OR the categories from both responses
+                    cat0 = row.get('response_0_harm_category', {})
+                    cat1 = row.get('response_1_harm_category', {})
+                    for orig_key, short_key in CAT_MAP.items():
+                        v0 = 1 if cat0.get(orig_key, False) else 0
+                        v1 = 1 if cat1.get(orig_key, False) else 0
+                        existing[short_key] = max(existing[short_key], v0, v1)
+                    break
+            continue
+
+        seen_prompts.add(prompt_hash)
+        entry = {'prompt': prompt_clean}
+
+        # Union of harm categories across both responses
+        cat0 = row.get('response_0_harm_category', {})
+        cat1 = row.get('response_1_harm_category', {})
+
+        for orig_key, short_key in CAT_MAP.items():
+            v0 = 1 if cat0.get(orig_key, False) else 0
+            v1 = 1 if cat1.get(orig_key, False) else 0
+            entry[short_key] = max(v0, v1)
+
+        data.append(entry)
+
+        if (i + 1) % 50000 == 0:
+            print(f'  Processed {i + 1} rows...')
+
+    print(f'  Final: {len(data)} rows ({skipped} skipped, deduped from {len(ds)})')
+    write_json_and_js('saferlhf', data)
+
+
 def generate_registry():
     """Generate registry.json and registry.js with full schema metadata."""
     print('Generating registry...')
 
     registry = {
         'datasets': [
+            {
+                'id': 'jigsaw',
+                'name': 'Jigsaw Toxic Comments',
+                'source': 'Google Jigsaw (2018)',
+                'license': 'CC0',
+                'paper': 'https://www.kaggle.com/c/jigsaw-toxic-comment-classification-challenge',
+                'repo': 'https://huggingface.co/datasets/Arsive/toxicity_classification_jigsaw',
+                'file': 'datasets/jigsaw.json',
+                'fileJs': 'datasets/jigsaw.js',
+                'textField': 'comment',
+                'note': '160K Wikipedia talk page comments classified across 6 toxicity categories. The founding multi-label content moderation dataset.',
+                'categories': [
+                    {'key': 'TX', 'name': 'toxic', 'short': 'toxic',
+                     'definition': 'Comments that are rude, disrespectful, or otherwise likely to make someone leave a discussion.'},
+                    {'key': 'ST', 'name': 'severe toxic', 'short': 'severe toxic',
+                     'definition': 'Comments that are very hateful, aggressive, or disrespectful to an extreme degree.'},
+                    {'key': 'OB', 'name': 'obscene', 'short': 'obscene',
+                     'definition': 'Comments containing obscene or vulgar language.'},
+                    {'key': 'TH', 'name': 'threat', 'short': 'threat',
+                     'definition': 'Comments containing threats of violence or harm.'},
+                    {'key': 'IN', 'name': 'insult', 'short': 'insult',
+                     'definition': 'Comments intended to insult or demean someone.'},
+                    {'key': 'IH', 'name': 'identity hate', 'short': 'identity hate',
+                     'definition': 'Comments that express hatred toward a person based on identity (race, religion, gender, etc.).'}
+                ]
+            },
             {
                 'id': 'openai',
                 'name': 'OpenAI Moderation',
@@ -332,6 +501,58 @@ def generate_registry():
                      'definition': 'Content related to terrorism or organized criminal activities.'},
                     {'key': 'VI', 'name': 'violence/incitement', 'short': 'violence',
                      'definition': 'Content that promotes violence, aiding and abetting, or incitement to violence.'}
+                ]
+            },
+            {
+                'id': 'saferlhf',
+                'name': 'PKU-SafeRLHF',
+                'source': 'PKU-Alignment (2024)',
+                'license': 'CC-BY-NC-4.0',
+                'paper': 'https://arxiv.org/abs/2406.15513',
+                'repo': 'https://huggingface.co/datasets/PKU-Alignment/PKU-SafeRLHF',
+                'file': 'datasets/saferlhf.json',
+                'fileJs': 'datasets/saferlhf.js',
+                'textField': 'prompt',
+                'note': '265K preference pairs with 19 harm categories and 3-level severity. Extends BeaverTails with cybercrime, mental manipulation, and environmental damage.',
+                'categories': [
+                    {'key': 'AB', 'name': 'animal abuse', 'short': 'animal abuse',
+                     'definition': 'Content that promotes or depicts cruelty, harm, or neglect toward animals.'},
+                    {'key': 'CC', 'name': 'cybercrime', 'short': 'cybercrime',
+                     'definition': 'Content related to hacking, phishing, malware, or other computer-based crimes.'},
+                    {'key': 'CI', 'name': 'copyright issues', 'short': 'copyright',
+                     'definition': 'Content involving copyright infringement or intellectual property violations.'},
+                    {'key': 'DB', 'name': 'discriminatory behavior', 'short': 'discrimination',
+                     'definition': 'Content promoting discrimination based on identity characteristics.'},
+                    {'key': 'DR', 'name': 'drugs', 'short': 'drugs',
+                     'definition': 'Content promoting drug use or production of controlled substances.'},
+                    {'key': 'EC', 'name': 'economic crime', 'short': 'econ. crime',
+                     'definition': 'Content related to fraud, embezzlement, or financial crimes.'},
+                    {'key': 'ED', 'name': 'environmental damage', 'short': 'environment',
+                     'definition': 'Content promoting or facilitating environmental harm or pollution.'},
+                    {'key': 'HT', 'name': 'human trafficking', 'short': 'trafficking',
+                     'definition': 'Content related to human trafficking, forced labor, or modern slavery.'},
+                    {'key': 'IB', 'name': 'insulting behavior', 'short': 'insults',
+                     'definition': 'Content intended to insult, demean, or belittle individuals.'},
+                    {'key': 'MM', 'name': 'mental manipulation', 'short': 'manipulation',
+                     'definition': 'Content designed to psychologically manipulate, gaslight, or coerce people.'},
+                    {'key': 'NS', 'name': 'endangering national security', 'short': 'nat. security',
+                     'definition': 'Content that threatens national security or promotes espionage.'},
+                    {'key': 'PH', 'name': 'endangering public health', 'short': 'pub. health',
+                     'definition': 'Content that endangers public health through misinformation or harmful advice.'},
+                    {'key': 'PO', 'name': 'disrupting public order', 'short': 'pub. order',
+                     'definition': 'Content that promotes disruption of public order or civil unrest.'},
+                    {'key': 'PS', 'name': 'psychological harm', 'short': 'psych. harm',
+                     'definition': 'Content that causes or promotes psychological distress, trauma, or emotional harm.'},
+                    {'key': 'PV', 'name': 'privacy violation', 'short': 'privacy',
+                     'definition': 'Content that violates or encourages violation of personal privacy.'},
+                    {'key': 'PY', 'name': 'physical harm', 'short': 'physical harm',
+                     'definition': 'Content that promotes or facilitates physical harm to individuals.'},
+                    {'key': 'SX', 'name': 'sexual content', 'short': 'sexual',
+                     'definition': 'Sexually explicit or suggestive content.'},
+                    {'key': 'VL', 'name': 'violence', 'short': 'violence',
+                     'definition': 'Content depicting or promoting violence.'},
+                    {'key': 'WC', 'name': 'white-collar crime', 'short': 'white-collar',
+                     'definition': 'Content related to corporate fraud, insider trading, or business-related crimes.'}
                 ]
             },
             {
@@ -451,12 +672,18 @@ def main():
         process_beavertails()
     elif cmd == 'aegis':
         process_aegis()
+    elif cmd == 'jigsaw':
+        process_jigsaw()
+    elif cmd == 'saferlhf':
+        process_saferlhf()
     elif cmd == 'registry':
         generate_registry()
     elif cmd == 'all':
         generate_registry()
         process_openai()
+        process_jigsaw()
         process_beavertails()
+        process_saferlhf()
         process_aegis()
     else:
         print(f'Unknown command: {cmd}')
