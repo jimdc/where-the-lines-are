@@ -1,9 +1,10 @@
-const CACHE_NAME = 'ew-cache-v4';
+const CACHE_NAME = 'ew-cache-v5';
 const URLS_TO_CACHE = [
   './',
   './index.html',
   './dataset-loader.js',
   './datasets/registry.json',
+  './datasets/jigsaw.json',
   './datasets/openai.json',
   './static/styles.css',
   './static/vis.js',
@@ -12,8 +13,8 @@ const URLS_TO_CACHE = [
   './icon-512.png'
 ];
 
-// Note: beavertails.json (~51MB) and aegis.json (~13MB) are NOT pre-cached.
-// They are cached on first access via the fetch handler's network-first strategy.
+// Note: beavertails.json (~51MB), saferlhf.json, and aegis.json (~13MB) are NOT pre-cached.
+// They are cached on first access via the fetch handler's cache-on-fetch strategy.
 
 self.addEventListener('install', event => {
   event.waitUntil(

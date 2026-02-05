@@ -186,12 +186,13 @@ over, to show the data."
 
 ## Dataset Selector as Small Multiples (pp. 170-175)
 
-The dataset selector uses three horizontal panels — one per dataset — styled
+The dataset selector uses five horizontal panels — one per dataset — styled
 as small multiples. Each panel shows the dataset name, category count, source,
 year, and license. The active panel is marked with a dark left border; inactive
 panels have a light border. This follows Tufte's small multiples principle:
 the panels are "inevitably comparative" (p. 175), letting the viewer see at a
-glance that OpenAI has 8 categories, BeaverTails has 14, and Aegis has 23.
+glance the progression from Jigsaw's 6 categories (2018) through Aegis's 23
+(2024).
 
 No tabs, no dropdowns, no icons. The selector is data about data — metadata
 rendered with the same restraint as the visualizations themselves.
@@ -199,7 +200,7 @@ rendered with the same restraint as the visualizations themselves.
 ## Adaptive Visualization Sizing (pp. 168-169)
 
 All visualizations adapt automatically to the number of categories in the
-active dataset (8, 14, or 23). The co-occurrence matrix scales cell size
+active dataset (6, 8, 14, 19, or 23). The co-occurrence matrix scales cell size
 from 42px (≤10 categories) to 30px (≤16) to 22px (>16), with font sizes
 and label margins adjusting proportionally. The binary bitmap rotates column
 headers at -45° when categories exceed 10, preventing overlap. The exclusivity
