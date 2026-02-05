@@ -45,6 +45,56 @@ a:hover { color: #000; }
     font-style: italic;
 }
 
+/* ── Dataset Selector ── */
+#datasetSelector {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0.5rem 0 1rem;
+}
+
+.dataset-panel {
+    flex: 1 1 0;
+    min-width: 180px;
+    max-width: 320px;
+    padding: 0.6rem 0.8rem;
+    border: 1px solid #ddd;
+    border-left: 3px solid #ddd;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+.dataset-panel:hover {
+    border-color: #aaa;
+    border-left-color: #888;
+    background: #fafafa;
+}
+.dataset-panel-active {
+    border-left-color: #333;
+    background: #f8f8f8;
+}
+.dataset-panel-active:hover {
+    border-left-color: #333;
+}
+.dataset-panel-name {
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 0.9em;
+    font-weight: 600;
+    color: #222;
+    margin-bottom: 0.15rem;
+}
+.dataset-panel-meta {
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 0.78em;
+    color: #666;
+    line-height: 1.3;
+}
+.dataset-panel-license {
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 0.72em;
+    color: #999;
+    margin-top: 0.1rem;
+}
+
 /* ── Layout ── */
 #wordRow {
     display: flex;
@@ -104,6 +154,23 @@ th {
 .cat-cell {
     white-space: normal;
     vertical-align: top;
+}
+
+/* ── Virtual Scroll Container ── */
+#resultsVirtual {
+    max-height: 600px;
+    overflow-y: auto;
+    position: relative;
+}
+#resultsVirtual .virtual-spacer {
+    width: 1px;
+    pointer-events: none;
+}
+#resultsVirtual thead {
+    position: sticky;
+    top: 0;
+    background: #fff;
+    z-index: 1;
 }
 
 /* ── Surprise column ── */
@@ -349,4 +416,7 @@ mark {
     #filterControlsRow { max-width: 100%; }
     .pill { font-size: 0.75em; padding: 0.15rem 0.4rem; }
     #bitmapContainer { max-height: 250px; }
+    #datasetSelector { flex-direction: column; }
+    .dataset-panel { max-width: none; }
+    #resultsVirtual { max-height: 400px; }
 }

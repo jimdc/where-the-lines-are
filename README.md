@@ -8,32 +8,57 @@ Explore-wrongthink is a visualization tool for studying how content moderation c
 
 The interface follows Edward Tufte's principles from *The Visual Display of Quantitative Information*: maximize data density, eliminate chartjunk, label everything directly, and let the data speak through its structure rather than through decoration. Every pixel either carries data or gets out of the way.
 
+## Datasets
+
+Three datasets ship with the tool, each representing a different organization's approach to content moderation taxonomy:
+
+| Dataset | Source | Year | Prompts | Categories | License |
+|---------|--------|------|---------|-----------|---------|
+| **OpenAI Moderation** | [OpenAI moderation-api-release](https://github.com/openai/moderation-api-release) | 2022 | 1,680 | 8 | MIT |
+| **BeaverTails** | [PKU-Alignment](https://huggingface.co/datasets/PKU-Alignment/BeaverTails) | 2023 | 300,567 | 14 | CC-BY-NC-4.0 |
+| **NVIDIA Aegis v2** | [NVIDIA](https://huggingface.co/datasets/nvidia/Aegis-AI-Content-Safety-Dataset-2.0) | 2024 | 29,095 | 23 | CC-BY-4.0 |
+
+All three share the same multi-label binary structure (each prompt has one or more flagged categories) but slice content moderation differently. BeaverTails adds financial crime, terrorism, and privacy. Aegis adds profanity, criminal planning, PII, malware, and unauthorized advice. Self-harm appears in all three — compare exclusivity across taxonomies. Click a dataset panel at the top to switch; all visualizations rebuild from scratch.
+
 ## What can you discover?
 
-The eight moderation categories are not independent. The visualizations expose their hidden geometry:
+Moderation categories are not independent. The visualizations expose their hidden geometry — differently for each dataset.
 
-**Some categories never travel alone.** The exclusivity chart reveals that sexual/minors, hate/threatening, and violence/graphic are *never* flagged in isolation — they appear only when a parent category (sexual, hate, or violence) is also flagged. Self-harm, by contrast, is 92% exclusive: almost every self-harm prompt is *only* about self-harm. This tells you something about the taxonomy itself — the subcategories are strict refinements, while self-harm occupies its own semantic space.
+**Some categories never travel alone.** In the OpenAI dataset, the exclusivity chart reveals that sexual/minors, hate/threatening, and violence/graphic are *never* flagged in isolation — they appear only when a parent category is also flagged. Self-harm, by contrast, is 92% exclusive. Switch to BeaverTails and the exclusivity profile changes entirely: animal abuse is highly exclusive while discrimination is almost always shared.
 
-**Violence is the connective tissue of harm.** The co-occurrence matrix shows that violence co-occurs with nearly every other category: 40 prompts share violence + hate, 37 share violence + hate/threatening, 24 share violence + violence/graphic. Click the violence row and the word frequencies shift to "kill," "destroy," "war" — words that bridge hate speech into threatened action. Sexual content, meanwhile, barely touches violence (8 co-occurrences) or hate (2). These categories live in different neighborhoods.
+**Violence is the connective tissue of harm.** The co-occurrence matrix shows that violence co-occurs with nearly every other category. Click the violence row and the word frequencies shift to "kill," "destroy," "war." Sexual content barely touches violence. These categories live in different neighborhoods — visible across all three datasets.
 
-**Word distributions reveal category boundaries.** Click "kill" in the word frequency strip and the breakdown panel shows it appears in 27 prompts — 100% flagged for violence, 67% for hate, 63% for hate/threatening, but only 4% for sexual. Click "fuck" and the profile inverts: it spreads across sexual, harassment, and hate roughly equally. The proportional bars make these signatures immediately comparable.
+**Word distributions reveal category boundaries.** Click a word in the frequency strip and the breakdown panel shows how that word distributes across categories. The proportional bars make cross-category signatures immediately comparable.
 
-**Rare combinations are the most informative.** The surprise metric sorts prompts by the rarity of their category combination. The most surprising prompts — those flagged "unique" — carry combinations like hate + violence + hate/threatening + violence/graphic that appear nowhere else in the dataset. These edge cases reveal where the category boundaries blur and where annotators were forced to make judgment calls across multiple dimensions simultaneously.
+**Rare combinations are the most informative.** The surprise metric sorts prompts by the rarity of their category combination. Edge cases reveal where category boundaries blur and where annotators were forced to make judgment calls across multiple dimensions simultaneously.
 
-**The binary matrix shows population structure.** The prompt bitmap renders every row of data as a thin strip of dark and light cells. Viewed in aggregate, vertical dark bands show which categories dominate; horizontal patterns reveal clusters of similarly-classified prompts; and scattered dark cells in otherwise light rows mark the outliers. It is 2,400 data points in a glance — the kind of density that makes large-N patterns visible without summarization.
+**The binary matrix shows population structure.** Each row of data becomes a thin strip of dark and light cells. Vertical dark bands show which categories dominate; horizontal patterns reveal clusters; scattered dark cells mark outliers. BeaverTails renders 300K rows at full density.
 
-## Where does the data come from?
-
-The dataset comes from the 2022 paper ["A Holistic Approach to Undesired Content Detection in the Real World"](https://arxiv.org/abs/2208.03274), specifically the prompts and classifications from OpenAI's [moderation-api-release](https://github.com/openai/moderation-api-release/tree/main). It contains 1,680 prompts classified across 8 categories.
-
-Future versions should be able to compare and contrast different classification datasets. If you have data to share, please get in touch.
+**Cross-dataset comparison reveals taxonomy design choices.** The same behavior may be classified differently across datasets. OpenAI uses 8 coarse categories; BeaverTails splits into 14 including "controversial topics/politics"; Aegis uses 23 fine-grained categories including "needs caution" and "unauthorized advice." Switching between datasets makes these design choices visible through the same set of visualizations.
 
 ## Design
 
-The visualizations apply Tufte's principles throughout: high data-ink ratio, direct labeling, small multiples, data-text integration, grayscale palette, and zero external dependencies. Every chart is rendered in purpose-built canvas code with no frameworks.
+The visualizations apply Tufte's principles throughout: high data-ink ratio, direct labeling, small multiples, data-text integration, grayscale palette, and zero external dependencies. Every chart is rendered in purpose-built canvas code with no frameworks. All visualizations adapt their sizing, font, and layout automatically for 8, 14, or 23 categories.
 
 See [principles.md](principles.md) for the full design rationale with specific Tufte page citations.
 
 ## Usage
 
-Open `index.html` in a browser. Everything updates reactively — click a category, click a matrix cell, click a word, type a search, toggle a pill. No server required (though `python3 -m http.server` works if you prefer HTTP).
+Open `index.html` in a browser. Everything updates reactively — click a category, click a matrix cell, click a word, type a search, toggle a pill. No server required for the OpenAI dataset (works via `file://`), though `python3 -m http.server` is recommended to load BeaverTails and Aegis (51MB and 13MB respectively). A service worker caches datasets after first load for offline use.
+
+## File structure
+
+```
+index.html              Main page
+dataset-loader.js       Registry + dataset loading (file:// and HTTP)
+static/vis.js           All canvas visualizations
+static/styles.css       Tufte-inspired stylesheet
+datasets/
+  registry.json         Dataset manifest with schemas
+  openai.json           1,680 rows (1.2 MB)
+  beavertails.json      300,567 rows (51 MB)
+  aegis.json            29,095 rows (13 MB)
+  *.js                  JS wrappers for file:// protocol
+scripts/
+  preprocess.py         One-time HuggingFace → JSON pipeline
+```

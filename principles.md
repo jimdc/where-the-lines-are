@@ -27,10 +27,11 @@ Tufte (p. 107): chartjunk is "non-data-ink or redundant data-ink."
 
 ## Small Multiples (pp. 170-175)
 
-The single 8-bar category chart has been replaced with 8 individual panels
-in a horizontal strip. Each shows one category's count as a thin bar with
-a gray median reference line. This format is "inevitably comparative" and
-"drawn almost entirely with data-ink" (p. 175).
+The single bar chart has been replaced with individual panels in a horizontal
+strip — one per category (8, 14, or 23 depending on the active dataset). Each
+shows one category's count as a thin bar with a gray median reference line.
+This format is "inevitably comparative" and "drawn almost entirely with
+data-ink" (p. 175).
 
 Key quote (p. 175): "For non-data-ink, less is more. For data-ink, less
 is a bore."
@@ -182,6 +183,49 @@ and the percentage makes cross-category comparison immediate.
 
 Tufte (p. 139): "Mobilize every graphical element, perhaps several times
 over, to show the data."
+
+## Dataset Selector as Small Multiples (pp. 170-175)
+
+The dataset selector uses three horizontal panels — one per dataset — styled
+as small multiples. Each panel shows the dataset name, category count, source,
+year, and license. The active panel is marked with a dark left border; inactive
+panels have a light border. This follows Tufte's small multiples principle:
+the panels are "inevitably comparative" (p. 175), letting the viewer see at a
+glance that OpenAI has 8 categories, BeaverTails has 14, and Aegis has 23.
+
+No tabs, no dropdowns, no icons. The selector is data about data — metadata
+rendered with the same restraint as the visualizations themselves.
+
+## Adaptive Visualization Sizing (pp. 168-169)
+
+All visualizations adapt automatically to the number of categories in the
+active dataset (8, 14, or 23). The co-occurrence matrix scales cell size
+from 42px (≤10 categories) to 30px (≤16) to 22px (>16), with font sizes
+and label margins adjusting proportionally. The binary bitmap rotates column
+headers at -45° when categories exceed 10, preventing overlap. The exclusivity
+chart and combination dot plot measure actual label widths to determine layout.
+
+This applies Tufte's shrink principle (p. 169): "Graphics can be shrunk way
+down." The same visualization works at 8×8 and 23×23 without redesign,
+because the encoding is intrinsically scalable — cell shading, direct labels,
+and white-gap grids all scale without loss of readability.
+
+Large counts use K-notation (e.g., "79.5k" instead of "79544") to prevent
+numeric overflow in small cells, following the principle that data labels
+should fit their allocated space without truncation.
+
+## Virtual Scrolling for Data Density (p. 168)
+
+The results table uses virtual scrolling to handle datasets up to 300K rows.
+Only the ~30 visible rows are rendered in the DOM at any time; spacer elements
+maintain correct scrollbar height. This is a performance technique, not a
+design compromise — the viewer sees the same table they would see with full
+rendering, but the browser remains responsive.
+
+This enables the tool to present the full BeaverTails dataset (300,567 prompts)
+without sampling or pagination, following Tufte's data density principle
+(p. 168): "Maximize data density and the size of the data matrix, within
+reason." Sampling would editorialize the data; virtual scrolling preserves it.
 
 ## Zero External Dependencies
 
