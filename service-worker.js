@@ -1,16 +1,14 @@
-const CACHE_NAME = 'ew-cache-v2';
+const CACHE_NAME = 'ew-cache-v3';
 const URLS_TO_CACHE = [
   './',
   './index.html',
   './dataset-loader.js',
   './dataset.json',
   './static/styles.css',
+  './static/vis.js',
   './manifest.json',
   './icon-192.png',
-  './icon-512.png',
-  'https://cdn.jsdelivr.net/npm/chart.js@3.9.1',
-  'https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@1.2.0/dist/chartjs-chart-matrix.min.js',
-  'https://cdn.jsdelivr.net/npm/wordcloud@1.1.0/src/wordcloud2.js'
+  './icon-512.png'
 ];
 
 self.addEventListener('install', event => {

@@ -3,42 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <title>Explore-wrongthink</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="static/styles.css">
-    <!-- Pin Chart.js to a version compatible with the matrix plugin -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@1.2.0/dist/chartjs-chart-matrix.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/wordcloud@1.1.0/src/wordcloud2.js"></script>
-    <script>
-    // Register the matrix plugin explicitly and log the loaded versions
-    console.log('Chart.js version:', Chart && Chart.version);
-    if (Chart.registry && Chart.registry.getController && Chart.registry.getController('matrix')) {
-        console.log('ChartMatrix plugin detected');
-    } else if (window.ChartMatrix && Chart.register) {
-        try {
-            Chart.register(ChartMatrix.MatrixController, ChartMatrix.MatrixElement);
-            console.log('ChartMatrix plugin registered');
-        } catch (err) {
-            console.error('Failed to register ChartMatrix plugin:', err);
-        }
-    } else {
-        console.error('ChartMatrix plugin not found');
-    }
-    </script>
 </head>
 <body>
 <div id="loading">
-  <div class="spinner"></div>
-  <div id="loading-text">Loading dataset... <span class="text-muted">(debug messages below)</span></div>
-  <div id="loading-debug" class="text-muted small"></div>
+  <div id="loading-text">Loading dataset...</div>
+  <div id="loading-debug"></div>
 </div>
-<div class="container my-4">
+<div id="mainContent">
 <h1>Explore-wrongthink</h1>
-<p class="text-danger">Contains potentially disturbing text.</p>
-<details class="mb-3">
+<p class="danger">Contains potentially disturbing text.</p>
+<p id="datasetSummary" class="muted"></p>
+
+<details>
   <summary>Category definitions</summary>
   <div class="table-responsive">
-  <table class="table table-bordered table-sm mt-2">
+  <table id="defTable">
     <thead>
       <tr><th>Category</th><th>Label</th><th>Definition</th></tr>
     </thead>
@@ -55,110 +35,101 @@
   </table>
   </div>
 </details>
-<div id="mainContent">
-  <div id="mainRow">
-    <div id="leftCol">
-      <h2>Word Cloud</h2>
-      <p class="text-muted">Click a word to set the search bar to that term.</p>
-      <div id="wordCloudSection">
-        <canvas id="wordCloud" class="mb-4"></canvas>
-      </div>
-    </div>
-    <div id="rightCol">
-      <div id="filterBox" class="control-box">
-        <form id="filterForm">
-          <div class="table-responsive">
-            <table class="table table-bordered table-sm mb-2">
-              <thead>
-                <tr>
-                  <th>Classification key</th>
-                  <th>Filter</th>
-                </tr>
-              </thead>
-              <tbody id="filterBody"></tbody>
-            </table>
-          </div>
-          <div id="pairFilters" class="my-2"></div>
-          <div id="suggestions" class="my-2"></div>
-          <button type="submit" class="btn btn-primary">Generate subset</button>
-        </form>
-        <div id="compactControlsRow">
-          <div class="wordsearch-box">
-            <label for="searchQuery" class="form-label" style="font-size:0.92em; margin-bottom:2px;">Word Search</label>
-            <input type="text" id="searchQuery" class="form-control" placeholder="Search prompts by keyword...">
-          </div>
-        </div>
-        <div id="filterSummary" class="mb-2"></div>
-      </div>
-    </div>
-  </div>
 
-  <div id="matchingLinesSection">
-    <h2 id="match-count">0 Matching lines:</h2>
-    <div class="table-responsive">
-      <table class="table table-bordered table-sm" id="results">
-        <thead>
-          <tr>
-            <th>Prompt <small class="text-muted">(hover for classifications)</small></th>
-          </tr>
-        </thead>
-        <tbody>
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
+<h2>Category counts</h2>
+<div id="categoryStripContainer"></div>
 
-</div>
-<div id="wordTooltip"></div>
-<h2 id="match-count">0 Matching lines:</h2>
-<div class="table-responsive">
-<table class="table table-bordered table-sm" id="results">
-    <thead>
-        <tr>
-            <th>Prompt <small class="text-muted">(hover for classifications)</small></th>
-        </tr>
-    </thead>
-    <tbody>
-</tbody>
-</table>
-</div>
-<div id="charts" style="display:none">
-<h2>Single category counts</h2>
-<canvas id="singleChart"></canvas>
+<h2>Category exclusivity</h2>
+<p class="hint">Dark = flagged for this category alone. Light = shared with other categories.</p>
+<div id="exclusivitySection"><canvas id="exclusivityCanvas"></canvas></div>
+
+<p class="hint">Click a category to focus on it. Click the matrix below to explore overlaps.</p>
+
 <h2>Pairwise co-occurrences</h2>
-<canvas id="pairwiseChart"></canvas>
-<h2>Key combination frequencies</h2>
-<canvas id="comboChart"></canvas>
+<p class="hint">Darker cells = more prompts flagged for both categories. Click any cell to filter.</p>
+<div id="cooccurrenceSection">
+  <canvas id="cooccurrenceCanvas"></canvas>
 </div>
+
+<h2>Active filters</h2>
+<div id="categoryPills"></div>
+<div id="filterControlsRow">
+  <div class="wordsearch-box">
+    <label for="searchQuery">Search prompts</label>
+    <input type="text" id="searchQuery" placeholder="Search by keyword...">
+  </div>
+</div>
+<div id="filterSummary"></div>
+
+<div id="wordRow">
+  <div id="wordCol">
+    <h2>Word frequencies</h2>
+    <p class="hint">Click a word to see which categories it appears in.</p>
+    <div id="wordFreqSection"></div>
+  </div>
+  <div id="breakdownCol">
+    <div id="wordBreakdownPanel"></div>
+  </div>
+</div>
+
+<h2>Prompt binary matrix</h2>
+<p class="hint">Each row is one prompt. Dark cells = category flagged.</p>
+<div id="bitmapSection">
+  <div id="bitmapContainer"></div>
+  <p id="bitmapOverflow" class="muted" style="display:none;"></p>
+</div>
+
+<div id="matchingLinesSection">
+  <h2 id="match-count">0 Matching prompts</h2>
+  <p class="hint">Sorted by surprise when unfiltered. Unique combinations appear first.</p>
+  <div class="table-responsive">
+    <table id="results">
+      <thead>
+        <tr>
+          <th>Prompt</th>
+          <th class="surprise-col-header">Surprise</th>
+          <th class="cat-col-header">Categories</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<h2>Category combination frequencies</h2>
+<div id="comboSection">
+  <canvas id="comboCanvas"></canvas>
+</div>
+
+</div>
+<script src="static/vis.js"></script>
 <script>
-const checkboxLabelMapping = {
-    'S': 'sexual (S)',
-    'H': 'hate (H)',
-    'V': 'violence (V)',
-    'HR': 'harassment (HR)',
-    'SH': 'self-harm (SH)',
-    'S3': 'sexual/minors (S3)',
-    'H2': 'hate/threatening (H2)',
-    'V2': 'violence/graphic (V2)',
-    'None': 'no categories flagged'
+/* ── Category name mappings ── */
+const CATEGORY_NAMES = {
+    'S': 'sexual content',
+    'H': 'hate speech',
+    'V': 'violence',
+    'HR': 'harassment',
+    'SH': 'self-harm',
+    'S3': 'sexual/minors',
+    'H2': 'hate/threatening',
+    'V2': 'violence/graphic'
+};
+const CATEGORY_SHORT = {
+    'S': 'sexual',
+    'H': 'hate',
+    'V': 'violence',
+    'HR': 'harassment',
+    'SH': 'self-harm',
+    'S3': 'sexual/minors',
+    'H2': 'hate/threat.',
+    'V2': 'violence/graphic'
 };
 
-function updateLoadingText(msg) {
-    const el = document.getElementById('loading-text');
-    if (el) el.textContent = msg;
-}
+const CATEGORY_KEYS = ['S', 'H', 'V', 'HR', 'SH', 'S3', 'H2', 'V2'];
+const ALL_FILTER_KEYS = CATEGORY_KEYS.concat(['None']);
+const KEYS = CATEGORY_KEYS;
 
-function appendLoadingDebug(msg) {
-    const el = document.getElementById('loading-debug');
-    if (el) {
-        const div = document.createElement('div');
-        div.className = 'debug-msg';
-        div.textContent = msg;
-        el.appendChild(div);
-    }
-    console.log(msg);
-}
 const checkboxDefinitionMapping = {
     'S': 'Content meant to arouse sexual excitement, such as the description of sexual activity, or that promotes sexual services (excluding sex education and wellness).',
     'H': 'Content that expresses, incites, or promotes hate based on race, gender, ethnicity, religion, nationality, sexual orientation, disability status, or caste.',
@@ -169,108 +140,110 @@ const checkboxDefinitionMapping = {
     'H2': 'Hateful content that also includes violence or serious harm towards the targeted group.',
     'V2': 'Violent content that depicts death, violence, or serious physical injury in extreme graphic detail.'
 };
-const checkboxes = Object.keys(checkboxLabelMapping);
-const CATEGORY_KEYS = checkboxes.filter(k => k !== 'None');
 
-function buildFilterTable() {
-    const tbody = document.getElementById('filterBody');
-    checkboxes.forEach(cb => {
-        const tr = document.createElement('tr');
-        const def = checkboxDefinitionMapping[cb] || '';
-        tr.innerHTML =
-            `<td><label for="tri-${cb}" class="category-label" title="${def}">${checkboxLabelMapping[cb]}</label> ` +
-            `<a href="#" id="count-${cb}" class="count-link small ms-1"></a></td>` +
-            `<td><input id="tri-${cb}" type="checkbox" class="tristate" data-state="Any"><span class="ms-1 state-label" id="tri-${cb}-label">Any</span></td>`;
-        tbody.appendChild(tr);
-    });
-    tbody.querySelectorAll('.tristate').forEach(initTriState);
+function updateLoadingText(msg) {
+    var el = document.getElementById('loading-text');
+    if (el) el.textContent = msg;
 }
 
-function initTriState(input) {
-    const label = document.getElementById(`${input.id}-label`);
-    function update() {
-        const state = input.dataset.state;
-        if (state === 'Include') {
-            input.checked = true;
-            input.indeterminate = false;
-            if (label) label.textContent = 'Include';
-        } else if (state === 'Exclude') {
-            input.checked = false;
-            input.indeterminate = false;
-            if (label) label.textContent = 'Exclude';
-        } else {
-            input.checked = false;
-            input.indeterminate = true;
-            if (label) label.textContent = 'Any';
-        }
+function appendLoadingDebug(msg) {
+    var el = document.getElementById('loading-debug');
+    if (el) {
+        var div = document.createElement('div');
+        div.textContent = msg;
+        el.appendChild(div);
     }
+    console.log(msg);
+}
 
-    input.addEventListener('click', e => {
-        e.preventDefault();
-        const state = input.dataset.state;
-        if (state === 'Any') input.dataset.state = 'Include';
-        else if (state === 'Include') input.dataset.state = 'Exclude';
-        else input.dataset.state = 'Any';
-        update();
-        document.getElementById('filterForm').dispatchEvent(new Event('change'));
+/* ── Name helper functions ── */
+function categoryName(key) {
+    return CATEGORY_NAMES[key] || key;
+}
+
+function categoryShort(key) {
+    return CATEGORY_SHORT[key] || key;
+}
+
+function gloss(key) {
+    return CATEGORY_SHORT[key] || key;
+}
+
+/* ── Category Pills ── */
+var pillStates = {};
+
+function buildCategoryPills() {
+    var container = document.getElementById('categoryPills');
+    container.innerHTML = '';
+
+    ALL_FILTER_KEYS.forEach(function(key) {
+        pillStates[key] = 'Any';
+        var btn = document.createElement('button');
+        btn.className = 'pill';
+        btn.id = 'pill-' + key;
+        btn.dataset.key = key;
+        btn.dataset.state = 'Any';
+        var displayName = key === 'None' ? 'none' : categoryShort(key);
+        btn.textContent = displayName;
+        btn.title = key === 'None' ? 'Prompts with no categories flagged' : (checkboxDefinitionMapping[key] || '');
+
+        btn.addEventListener('click', function() {
+            cyclePillState(key);
+        });
+
+        container.appendChild(btn);
     });
-
-    update();
 }
 
-function updateTriStateDisplay(input) {
-    const label = document.getElementById(`${input.id}-label`);
-    const state = input.dataset.state;
-    if (state === 'Include') {
-        input.checked = true;
-        input.indeterminate = false;
-        if (label) label.textContent = 'Include';
-    } else if (state === 'Exclude') {
-        input.checked = false;
-        input.indeterminate = false;
-        if (label) label.textContent = 'Exclude';
-    } else {
-        input.checked = false;
-        input.indeterminate = true;
-        if (label) label.textContent = 'Any';
-    }
+function cyclePillState(key) {
+    var state = pillStates[key];
+    if (state === 'Any') pillStates[key] = 'Include';
+    else if (state === 'Include') pillStates[key] = 'Exclude';
+    else pillStates[key] = 'Any';
+    updatePillDisplay(key);
+    generateSubset();
 }
 
-function setTriState(key, state) {
-    const input = document.getElementById(`tri-${key}`);
-    if (!input) return;
-    input.dataset.state = state;
-    updateTriStateDisplay(input);
+function setPillState(key, state) {
+    pillStates[key] = state;
+    updatePillDisplay(key);
 }
 
-function resetTriStates() {
-    checkboxes.forEach(cb => setTriState(cb, 'Any'));
+function updatePillDisplay(key) {
+    var btn = document.getElementById('pill-' + key);
+    if (!btn) return;
+    var state = pillStates[key];
+    btn.classList.remove('pill-include', 'pill-exclude');
+    if (state === 'Include') btn.classList.add('pill-include');
+    else if (state === 'Exclude') btn.classList.add('pill-exclude');
+    btn.dataset.state = state;
 }
 
+function resetPills() {
+    ALL_FILTER_KEYS.forEach(function(key) {
+        pillStates[key] = 'Any';
+        updatePillDisplay(key);
+    });
+}
+
+/* ── Row value + escaping ── */
 function getRowValue(row, key) {
     if (key === 'None') {
-        return CATEGORY_KEYS.every(k => row[k] === 0) ? '1' : '0';
+        return CATEGORY_KEYS.every(function(k) { return row[k] === 0; }) ? '1' : '0';
     }
     return row[key] !== undefined ? String(row[key]) : 'N/A';
 }
 
-
 function escapeHtml(str) {
-    return str.replace(/[&<>"']/g, c => ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#039;'
-    })[c]);
+    return str.replace(/[&<>"']/g, function(c) {
+        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c];
+    });
 }
 
 function highlightPrompt(text, search) {
     if (!search) return escapeHtml(text);
-    const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-    let last = 0;
-    let out = '';
-    let match;
+    var regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    var last = 0, out = '', match;
     while ((match = regex.exec(text)) !== null) {
         out += escapeHtml(text.slice(last, match.index));
         out += '<mark>' + escapeHtml(match[0]) + '</mark>';
@@ -280,145 +253,12 @@ function highlightPrompt(text, search) {
     return out;
 }
 
-function generateSubset(event) {
-    if (event) {
-        event.preventDefault();
-    }
-    const rawQuery = document.getElementById('searchQuery').value.trim();
-    const query = rawQuery.toLowerCase();
-    const values = {};
-    checkboxes.forEach(cb => {
-        const el = document.getElementById(`tri-${cb}`);
-        values[cb] = el ? el.dataset.state || 'Any' : 'Any';
-    });
-    const summaryParts = [];
-    checkboxes.forEach(cb => {
-        const state = values[cb];
-        if (state !== 'Any') {
-            summaryParts.push(`${cb}: ${state}`);
-        }
-    });
-    if (rawQuery) summaryParts.push(`search: "${rawQuery}"`);
-    const summaryEl = document.getElementById('filterSummary');
-    if (summaryEl) {
-        summaryEl.textContent = summaryParts.length ? summaryParts.join(', ') : 'No filters applied';
-    }
-    updateSuggestionDisplay(values);
-    const subset = dataset.filter(row => {
-        const match = checkboxes.every(key => {
-            const rowValue = getRowValue(row, key);
-            const selected = values[key];
-            if (selected === 'Include') return rowValue === '1';
-            if (selected === 'Exclude') return rowValue === '0';
-            return true; // Any
-        });
-        return match && (query === '' || (row.prompt && row.prompt.toLowerCase().includes(query)));
-    });
-
-    const results = subset.map(row => {
-        const keys0 = [];
-        const keys1 = [];
-        const keysNA = [];
-        checkboxes.forEach(key => {
-            const rowValue = getRowValue(row, key);
-            if (rowValue === '0') keys0.push(checkboxLabelMapping[key]);
-            else if (rowValue === '1') keys1.push(checkboxLabelMapping[key]);
-            else keysNA.push(checkboxLabelMapping[key]);
-        });
-        return { prompt: row.prompt || 'N/A', keys_0: keys0.join(', '), keys_1: keys1.join(', '), keys_na: keysNA.join(', ') };
-    });
-
-    document.getElementById('match-count').textContent = `${results.length} Matching lines:`;
-    const tbody = document.querySelector('#results tbody');
-    tbody.innerHTML = '';
-    results.forEach(row => {
-        const tr = document.createElement('tr');
-        const td = document.createElement('td');
-        const info = [];
-        if (row.keys_1) info.push(`1: ${row.keys_1}`);
-        if (row.keys_0) info.push(`0: ${row.keys_0}`);
-        if (row.keys_na) info.push(`N/A: ${row.keys_na}`);
-        td.innerHTML = highlightPrompt(row.prompt, rawQuery);
-        if (info.length) td.title = info.join(' | ');
-        tr.appendChild(td);
-        tbody.appendChild(tr);
-    });
-    if (results.length === 0) {
-        const tr = document.createElement('tr');
-        const td = document.createElement('td');
-        td.textContent = 'No results. Try relaxing the filters.';
-        tr.appendChild(td);
-        tbody.appendChild(tr);
-    }
-
-    lastWordCounts = computeWordCounts(subset);
-    renderWordCloud(lastWordCounts);
-}
-document.getElementById('filterForm').addEventListener('submit', generateSubset);
-buildFilterTable();
-document.getElementById('filterForm').addEventListener('change', generateSubset);
-document.getElementById('searchQuery').addEventListener('input', generateSubset);
-
-const CANVAS_HEIGHT = 500;
-window.addEventListener('resize', () => renderWordCloud(lastWordCounts));
-const KEYS = CATEGORY_KEYS;
-
-const datasetPromise = new Promise((resolve, reject) => {
-    console.log('Initializing dataset load');
-    updateLoadingText('Fetching dataset...');
-    appendLoadingDebug('Step 1/5: datasetPromise started');
-
-    window.datasetResolve = () => {
-        appendLoadingDebug('Dataset loaded');
-        resolve();
-    };
-    window.datasetReject = err => {
-        appendLoadingDebug('Dataset load failed: ' + (err && err.message));
-        reject(new Error('Failed to load dataset.json'));
-    };
-
-    const script = document.createElement('script');
-    script.src = 'dataset-loader.js';
-    script.onload = () => {
-        appendLoadingDebug('dataset-loader.js loaded');
-    };
-    script.onerror = err => {
-        appendLoadingDebug('dataset-loader.js failed to load');
-        reject(new Error('Failed to load dataset-loader.js'));
-    };
-    document.head.appendChild(script);
-    appendLoadingDebug('Step 2/5: dataset-loader.js script appended');
-});
-
-let datasetLoaded = false;
-datasetPromise.then(() => { datasetLoaded = true; });
-
-setTimeout(() => {
-    if (!datasetLoaded) {
-        appendLoadingDebug('Dataset still not loaded after 5s');
-        const el = document.getElementById('loading-text');
-        if (el && el.textContent.includes('Fetching')) {
-            el.textContent += ' (still loading, see debug or console)';
-        }
-    }
-}, 5000);
-
-setTimeout(() => {
-    if (!datasetLoaded) {
-        updateLoadingText('Failed to load dataset. See debug or console.');
-        appendLoadingDebug('Dataset failed to load within 10s');
-    }
-}, 10000);
-
-function gloss(key) {
-    return checkboxLabelMapping[key] || key;
-}
-
+/* ── Counting functions ── */
 function countSingleCategories(data) {
-    const counts = {};
-    KEYS.forEach(k => counts[k] = 0);
-    data.forEach(row => {
-        KEYS.forEach(k => {
+    var counts = {};
+    KEYS.forEach(function(k) { counts[k] = 0; });
+    data.forEach(function(row) {
+        KEYS.forEach(function(k) {
             if (row[k] === 1) counts[k]++;
         });
     });
@@ -426,18 +266,17 @@ function countSingleCategories(data) {
 }
 
 function countPairwise(data) {
-    const counts = {};
-    for (let i = 0; i < KEYS.length; i++) {
-        for (let j = i + 1; j < KEYS.length; j++) {
-            const pair = KEYS[i] + '+' + KEYS[j];
-            counts[pair] = 0;
+    var counts = {};
+    for (var i = 0; i < KEYS.length; i++) {
+        for (var j = i + 1; j < KEYS.length; j++) {
+            counts[KEYS[i] + '+' + KEYS[j]] = 0;
         }
     }
-    data.forEach(row => {
-        for (let i = 0; i < KEYS.length; i++) {
-            for (let j = i + 1; j < KEYS.length; j++) {
+    data.forEach(function(row) {
+        for (var i = 0; i < KEYS.length; i++) {
+            for (var j = i + 1; j < KEYS.length; j++) {
                 if (row[KEYS[i]] === 1 && row[KEYS[j]] === 1) {
-                    const pair = KEYS[i] + '+' + KEYS[j];
+                    var pair = KEYS[i] + '+' + KEYS[j];
                     counts[pair] = (counts[pair] || 0) + 1;
                 }
             }
@@ -447,217 +286,100 @@ function countPairwise(data) {
 }
 
 function buildSuggestions(pairCounts) {
-    const result = {};
-    KEYS.forEach(k => result[k] = []);
-    Object.entries(pairCounts).forEach(([pair, count]) => {
-        const [a, b] = pair.split('+');
-        result[a].push({ key: b, count });
-        result[b].push({ key: a, count });
+    var result = {};
+    KEYS.forEach(function(k) { result[k] = []; });
+    Object.entries(pairCounts).forEach(function(entry) {
+        var parts = entry[0].split('+'), count = entry[1];
+        result[parts[0]].push({ key: parts[1], count: count });
+        result[parts[1]].push({ key: parts[0], count: count });
     });
-    KEYS.forEach(k => {
-        result[k].sort((x, y) => y.count - x.count);
+    KEYS.forEach(function(k) {
+        result[k].sort(function(x, y) { return y.count - x.count; });
     });
     return result;
 }
 
 function countCombinations(data) {
-    const counts = {};
-    data.forEach(row => {
-        const keys1 = KEYS.filter(k => row[k] === 1).sort();
-        const combo = keys1.join('+') || 'none';
+    var counts = {};
+    data.forEach(function(row) {
+        var keys1 = KEYS.filter(function(k) { return row[k] === 1; }).sort();
+        var combo = keys1.join('+') || 'none';
         counts[combo] = (counts[combo] || 0) + 1;
     });
     return counts;
 }
 
-function showCounts(singleCounts, pairCounts) {
-    KEYS.forEach(k => {
-        const el = document.getElementById(`count-${k}`);
-        if (!el) return;
-        const count = singleCounts[k] || 0;
-        el.textContent = `(${count})`;
-        el.addEventListener('click', e => {
-            e.preventDefault();
-            resetTriStates();
-            setTriState(k, 'Include');
-            document.getElementById('filterForm').dispatchEvent(new Event('change'));
-        });
+/* ── Exclusivity counting ── */
+function countExclusivity(data) {
+    var exclusive = {};
+    var shared = {};
+    KEYS.forEach(function(k) { exclusive[k] = 0; shared[k] = 0; });
+
+    data.forEach(function(row) {
+        var flagged = KEYS.filter(function(k) { return row[k] === 1; });
+        if (flagged.length === 1) {
+            exclusive[flagged[0]]++;
+        } else if (flagged.length > 1) {
+            flagged.forEach(function(k) { shared[k]++; });
+        }
     });
 
-    const container = document.getElementById('pairFilters');
-    if (!container) return;
-    const pairs = Object.entries(pairCounts)
-        .filter(([, c]) => c > 0)
-        .sort((a, b) => b[1] - a[1]);
-    container.textContent = '';
-    if (pairs.length) {
-        const label = document.createElement('span');
-        label.textContent = 'Common pairs: ';
-        container.appendChild(label);
-    }
-    pairs.forEach(([pair, count], idx) => {
-        const btn = document.createElement('a');
-        btn.href = '#';
-        btn.className = 'pair-link me-2';
-        btn.textContent = `${pair} (${count})`;
-        btn.addEventListener('click', e => {
-            e.preventDefault();
-            const [k1, k2] = pair.split('+');
-            resetTriStates();
-            setTriState(k1, 'Include');
-            setTriState(k2, 'Include');
-            document.getElementById('filterForm').dispatchEvent(new Event('change'));
-        });
-        container.appendChild(btn);
-    });
+    return { exclusive: exclusive, shared: shared };
 }
 
+/* ── Surprise metric helpers ── */
+function getComboKey(row) {
+    var flagged = KEYS.filter(function(k) { return row[k] === 1; }).sort();
+    return flagged.join('+') || 'none';
+}
+
+function computeSurpriseScore(row) {
+    var combo = getComboKey(row);
+    var freq = (window.COMBO_FREQS && window.COMBO_FREQS[combo]) || 1;
+    return 1 / freq;
+}
+
+/* ── Suggestion display ── */
 function updateSuggestionDisplay(values) {
-    const container = document.getElementById('suggestions');
+    var container = document.getElementById('filterSummary');
     if (!container) return;
-    document.querySelectorAll('.category-label').forEach(lbl => lbl.classList.remove('suggested'));
-    const included = KEYS.filter(k => values[k] === 'Include');
-    if (included.length === 1 && window.SUGGESTIONS) {
-        const key = included[0];
-        const pairs = window.SUGGESTIONS[key].slice(0, 3);
-        container.textContent = '';
-        if (pairs.length) {
-            const span = document.createElement('span');
-            span.textContent = `Likely with ${key}: `;
-            container.appendChild(span);
-            pairs.forEach((p, idx) => {
-                const lab = document.querySelector(`label[for="tri-${p.key}"]`);
-                if (lab) lab.classList.add('suggested');
-                const text = document.createElement('span');
-                text.textContent = `${p.key} (${p.count})`;
-                container.appendChild(text);
-                if (idx < pairs.length - 1) container.appendChild(document.createTextNode(', '));
-            });
-        }
+
+    var included = KEYS.filter(function(k) { return values[k] === 'Include'; });
+    var excluded = KEYS.filter(function(k) { return values[k] === 'Exclude'; });
+    var parts = [];
+
+    if (included.length) {
+        parts.push('Include: ' + included.map(categoryShort).join(', '));
+    }
+    if (excluded.length) {
+        parts.push('Exclude: ' + excluded.map(categoryShort).join(', '));
+    }
+    if (values['None'] === 'Include') parts.push('Only unflagged');
+    if (values['None'] === 'Exclude') parts.push('Exclude unflagged');
+
+    var rawQuery = document.getElementById('searchQuery').value.trim();
+    if (rawQuery) parts.push('search: \u201c' + rawQuery + '\u201d');
+
+    if (parts.length === 0) {
+        container.textContent = 'No filters applied \u2014 showing all prompts.';
     } else {
-        container.textContent = '';
+        var text = parts.join(' \u2022 ');
+        // Add co-occurrence hint for single-include
+        if (included.length === 1 && window.SUGGESTIONS) {
+            var key = included[0];
+            var top = window.SUGGESTIONS[key].slice(0, 3);
+            if (top.length) {
+                text += ' \u2014 Likely with: ' + top.map(function(p) {
+                    return categoryShort(p.key) + ' (' + p.count + ')';
+                }).join(', ');
+            }
+        }
+        container.textContent = text;
     }
 }
 
-function drawSingleCategoryChart(counts) {
-    const labels = KEYS;
-    const values = labels.map(k => counts[k] || 0);
-    return new Chart(document.getElementById('singleChart'), {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Count',
-                data: values,
-                backgroundColor: 'rgba(75, 192, 192, 0.6)'
-            }]
-        },
-        options: {
-            scales: {
-                y: { beginAtZero: true }
-            },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        title: items => gloss(items[0].label),
-                        label: ctx => `Count: ${ctx.parsed.y}`
-                    }
-                }
-            }
-        }
-    });
-}
-
-function drawPairwiseHeatmap(pairCounts) {
-    const data = [];
-    let max = 0;
-    for (let i = 0; i < KEYS.length; i++) {
-        for (let j = 0; j < KEYS.length; j++) {
-            let value = 0;
-            if (i !== j) {
-                const pair = i < j ? KEYS[i] + '+' + KEYS[j] : KEYS[j] + '+' + KEYS[i];
-                value = pairCounts[pair] || 0;
-            }
-            max = Math.max(max, value);
-            data.push({ x: j, y: i, v: value });
-        }
-    }
-    const ctx = document.getElementById('pairwiseChart').getContext('2d');
-    return new Chart(ctx, {
-        type: 'matrix',
-        data: { datasets: [{
-            label: 'Pairs',
-            data: data,
-            backgroundColor: ctx => {
-                const v = ctx.dataset.data[ctx.dataIndex].v;
-                const alpha = max ? v / max : 0;
-                return `rgba(0, 123, 255, ${alpha})`;
-            },
-            width: ({chart}) => {
-                const area = chart.chartArea || {};
-                return area.width ? (area.width / KEYS.length) - 1 : 0;
-            },
-            height: ({chart}) => {
-                const area = chart.chartArea || {};
-                return area.height ? (area.height / KEYS.length) - 1 : 0;
-            }
-        }] },
-        options: {
-            scales: {
-                x: { type: 'category', labels: KEYS, position: 'top' },
-                y: { type: 'category', labels: KEYS, reverse: true }
-            },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        title: items => {
-                            const d = items[0].raw;
-                            return `${gloss(KEYS[d.y])} + ${gloss(KEYS[d.x])}`;
-                        },
-                        label: item => `Count: ${item.raw.v}`
-                    }
-                }
-            }
-        }
-    });
-}
-
-function drawCombinationChart(combos) {
-    const sorted = Object.entries(combos).sort((a, b) => b[1] - a[1]);
-    const labels = sorted.map(x => x[0]);
-    const values = sorted.map(x => x[1]);
-    return new Chart(document.getElementById('comboChart'), {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Frequency',
-                data: values,
-                backgroundColor: 'rgba(153, 102, 255, 0.6)'
-            }]
-        },
-        options: {
-            scales: { x: { ticks: { autoSkip: false } }, y: { beginAtZero: true } },
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        title: items => items[0].label
-                            .split('+')
-                            .map(gloss)
-                            .join(' + '),
-                        label: ctx => `Frequency: ${ctx.parsed.y}`
-                    }
-                }
-            }
-        }
-    });
-}
-
-
-const defaultStopWords = [
+/* ── Stop word logic ── */
+var defaultStopWords = [
   'the','and','to','a','of','it','in','i','that','is','on','for','with','as','are','was',
   'this','but','be','have','has','had','or','an','my','if','me','so','im','you','we',
   'they','he','she','them','his','her','your','their','our','us','do','does','did',
@@ -666,63 +388,30 @@ const defaultStopWords = [
   'wont','about','up','down','out','over','again','more','some','no','yes','not',
   'very','into','because','also','s','t','m','d','ll','ve','re','person','organization'
 ];
-const stopWords = new Set(defaultStopWords);
+var stopWords = new Set(defaultStopWords);
 
-function buildDynamicStopWords(data, topN = 50) {
-    const counts = {};
-    data.forEach(row => {
+function buildDynamicStopWords(data, topN) {
+    topN = topN || 50;
+    var counts = {};
+    data.forEach(function(row) {
         if (!row.prompt) return;
-        const words = row.prompt.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
-        words.forEach(w => {
+        var words = row.prompt.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
+        words.forEach(function(w) {
             if (w && !defaultStopWords.includes(w) && !/^\d+$/.test(w)) {
                 counts[w] = (counts[w] || 0) + 1;
             }
         });
     });
-    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, topN);
-    sorted.forEach(([w]) => stopWords.add(w));
-}
-
-function buildRefinedStopWords(data, topN = 50) {
-    const info = {};
-    data.forEach(row => {
-        if (!row.prompt) return;
-        const rowCats = KEYS.filter(k => row[k] === 1);
-        const pairSet = new Set();
-        for (let i = 0; i < rowCats.length; i++) {
-            for (let j = i + 1; j < rowCats.length; j++) {
-                pairSet.add(rowCats[i] + '+' + rowCats[j]);
-            }
-        }
-        const words = row.prompt.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
-        words.forEach(w => {
-            if (!w || defaultStopWords.includes(w) || /^\d+$/.test(w)) return;
-            if (!info[w]) info[w] = { count: 0, cats: new Set(), pairs: new Set() };
-            const entry = info[w];
-            entry.count++;
-            rowCats.forEach(c => entry.cats.add(c));
-            pairSet.forEach(p => entry.pairs.add(p));
-        });
-    });
-    const catThreshold = Math.floor(KEYS.length / 2);
-    const pairThreshold = 6;
-    Object.entries(info).forEach(([w, entry]) => {
-        if (entry.cats.size > catThreshold || entry.pairs.size > pairThreshold) {
-            stopWords.add(w);
-        }
-    });
-    Object.entries(info)
-        .sort((a, b) => b[1].count - a[1].count)
-        .slice(0, topN)
-        .forEach(([w]) => stopWords.add(w));
+    Object.entries(counts).sort(function(a, b) { return b[1] - a[1]; }).slice(0, topN)
+        .forEach(function(e) { stopWords.add(e[0]); });
 }
 
 function computeWordCounts(data) {
-    const counts = {};
-    data.forEach(row => {
+    var counts = {};
+    data.forEach(function(row) {
         if (!row.prompt) return;
-        const words = row.prompt.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
-        words.forEach(w => {
+        var words = row.prompt.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
+        words.forEach(function(w) {
             if (w && !stopWords.has(w) && !/^\d+$/.test(w)) {
                 counts[w] = (counts[w] || 0) + 1;
             }
@@ -731,141 +420,304 @@ function computeWordCounts(data) {
     return counts;
 }
 
-function renderWordCloud(counts) {
-    const canvas = document.getElementById('wordCloud');
-    const tooltip = document.getElementById('wordTooltip');
-    if (!canvas) return;
+/* ── Visualization updates ── */
+var lastSubset = [];
+var lastWordCounts = {};
 
-    // Dynamically adjust canvas height based on word count
-    const minHeight = 260;
-    const maxHeight = 500;
-    const numWords = Object.keys(counts).length;
-    let targetHeight = minHeight + Math.min(maxHeight, numWords * 13);
-    targetHeight = Math.min(Math.max(targetHeight, minHeight), maxHeight);
+function updateVisualizations(subset) {
+    lastSubset = subset;
+    var singleCounts = countSingleCategories(subset);
+    var pairCounts = countPairwise(subset);
+    var comboCounts = countCombinations(subset);
+    var exclusivity = countExclusivity(subset);
 
-    // Width based on parent (responsive)
-    const parent = canvas.parentElement;
-    const width = Math.max(parent ? parent.offsetWidth : canvas.offsetWidth, 380);
-    canvas.width = width * 2; // high-DPI for crispness
-    canvas.height = targetHeight * 2;
-    canvas.style.width = width + 'px';
-    canvas.style.height = targetHeight + 'px';
+    // Small multiples strip (full names, clickable)
+    drawCategoryStrip(
+        document.getElementById('categoryStripContainer'),
+        singleCounts, KEYS, subset.length,
+        categoryShort,
+        function(key) {
+            resetPills();
+            setPillState(key, 'Include');
+            generateSubset();
+        }
+    );
 
-    // Prepare list for WordCloud2
-    const list = Object.entries(counts)
-        .filter(([w, c]) => c >= MIN_WORD_FREQ)
-        .sort((a, b) => b[1] - a[1]);
-    if (!list.length) {
-        // Optionally clear or write "No words"
-        const ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.font = '24px sans-serif';
-        ctx.fillStyle = '#888';
-        ctx.fillText('No words', 32, targetHeight / 2);
+    // Category exclusivity chart
+    drawExclusivityChart(
+        document.getElementById('exclusivityCanvas'),
+        exclusivity, singleCounts, KEYS,
+        categoryShort
+    );
+
+    // Co-occurrence matrix (full-name labels)
+    drawCooccurrenceMatrix(
+        document.getElementById('cooccurrenceCanvas'),
+        pairCounts, KEYS,
+        function(k1, k2) {
+            resetPills();
+            setPillState(k1, 'Include');
+            setPillState(k2, 'Include');
+            generateSubset();
+        },
+        categoryShort
+    );
+
+    // Word frequency strip
+    lastWordCounts = computeWordCounts(subset);
+    renderWordFrequencyStrip(
+        document.getElementById('wordFreqSection'),
+        lastWordCounts,
+        function(word) {
+            // Set search to word
+            var search = document.getElementById('searchQuery');
+            if (search) {
+                search.value = word;
+            }
+            // Show word-category breakdown
+            renderWordCategoryBreakdown(
+                document.getElementById('wordBreakdownPanel'),
+                word, subset, KEYS, categoryShort
+            );
+            generateSubset();
+        }
+    );
+
+    // Binary bitmap (data matrix)
+    var bitmapLimit = 300;
+    var bitmapData = subset.slice(0, bitmapLimit);
+    drawBinaryBitmap(
+        document.getElementById('bitmapContainer'),
+        bitmapData, KEYS, categoryShort
+    );
+    var overflowEl = document.getElementById('bitmapOverflow');
+    if (subset.length > bitmapLimit) {
+        overflowEl.style.display = '';
+        overflowEl.textContent = 'Showing first ' + bitmapLimit + ' of ' + subset.length + ' prompts.';
+    } else {
+        overflowEl.style.display = 'none';
+    }
+
+    // Combination dot plot (full-name labels)
+    drawCombinationDotPlot(
+        document.getElementById('comboCanvas'),
+        comboCounts, categoryShort
+    );
+}
+
+/* ── Main filter/subset logic ── */
+function generateSubset(event) {
+    if (event) event.preventDefault();
+    var rawQuery = document.getElementById('searchQuery').value.trim();
+    var query = rawQuery.toLowerCase();
+
+    var values = {};
+    ALL_FILTER_KEYS.forEach(function(key) {
+        values[key] = pillStates[key] || 'Any';
+    });
+
+    updateSuggestionDisplay(values);
+
+    var subset = dataset.filter(function(row) {
+        var match = ALL_FILTER_KEYS.every(function(key) {
+            var rowValue = getRowValue(row, key);
+            var selected = values[key];
+            if (selected === 'Include') return rowValue === '1';
+            if (selected === 'Exclude') return rowValue === '0';
+            return true;
+        });
+        return match && (query === '' || (row.prompt && row.prompt.toLowerCase().includes(query)));
+    });
+
+    // Determine if default (unfiltered) view for surprise sorting
+    var isDefaultView = !rawQuery &&
+        ALL_FILTER_KEYS.every(function(key) { return (pillStates[key] || 'Any') === 'Any'; });
+
+    // Sort by surprise descending in default view
+    if (isDefaultView && window.COMBO_FREQS) {
+        subset.sort(function(a, b) {
+            return computeSurpriseScore(b) - computeSurpriseScore(a);
+        });
+    }
+
+    // Find max surprise for bar normalization
+    var maxSurprise = 0;
+    if (window.COMBO_FREQS) {
+        subset.forEach(function(row) {
+            var s = computeSurpriseScore(row);
+            if (s > maxSurprise) maxSurprise = s;
+        });
+    }
+    if (maxSurprise === 0) maxSurprise = 1;
+
+    // Build results table with surprise column and category pills
+    document.getElementById('match-count').textContent = subset.length + ' Matching prompts';
+    var tbody = document.querySelector('#results tbody');
+    tbody.innerHTML = '';
+    subset.forEach(function(row) {
+        var tr = document.createElement('tr');
+
+        // Prompt cell
+        var td1 = document.createElement('td');
+        td1.innerHTML = highlightPrompt(row.prompt || 'N/A', rawQuery);
+        tr.appendChild(td1);
+
+        // Surprise cell
+        var tdS = document.createElement('td');
+        tdS.className = 'surprise-cell';
+        if (window.COMBO_FREQS) {
+            var score = computeSurpriseScore(row);
+            var combo = getComboKey(row);
+            var freq = window.COMBO_FREQS[combo] || 1;
+            var barW = Math.round((score / maxSurprise) * 40);
+
+            var bar = document.createElement('span');
+            bar.className = 'surprise-bar';
+            bar.style.width = barW + 'px';
+            tdS.appendChild(bar);
+
+            var label = document.createElement('span');
+            label.className = 'surprise-label';
+            if (freq === 1) {
+                label.textContent = 'unique';
+            } else if (freq <= 5) {
+                label.textContent = 'rare (' + freq + ')';
+            } else {
+                label.textContent = String(freq);
+            }
+            tdS.appendChild(label);
+        }
+        tr.appendChild(tdS);
+
+        // Category pills cell
+        var td2 = document.createElement('td');
+        td2.className = 'cat-cell';
+        var flagged = KEYS.filter(function(k) { return row[k] === 1; });
+        if (flagged.length === 0) {
+            var noneSpan = document.createElement('span');
+            noneSpan.className = 'pill-sm pill-none';
+            noneSpan.textContent = 'none';
+            td2.appendChild(noneSpan);
+        } else {
+            flagged.forEach(function(k) {
+                var span = document.createElement('span');
+                span.className = 'pill-sm';
+                span.textContent = categoryShort(k);
+                td2.appendChild(span);
+            });
+        }
+        tr.appendChild(td2);
+        tbody.appendChild(tr);
+    });
+
+    if (subset.length === 0) {
+        var tr = document.createElement('tr');
+        var td = document.createElement('td');
+        td.colSpan = 3;
+        td.textContent = 'No results. Try relaxing the filters.';
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+    }
+
+    updateVisualizations(subset);
+}
+
+/* ── Initialize pills + search ── */
+buildCategoryPills();
+document.getElementById('searchQuery').addEventListener('input', function() {
+    // Clear word breakdown when user types manually
+    var panel = document.getElementById('wordBreakdownPanel');
+    if (panel) panel.innerHTML = '';
+    generateSubset();
+});
+
+/* ── Dataset loading ── */
+var datasetPromise = new Promise(function(resolve, reject) {
+    console.log('Initializing dataset load');
+    updateLoadingText('Loading dataset...');
+    appendLoadingDebug('Step 1/3: datasetPromise started');
+
+    window.datasetResolve = function() {
+        appendLoadingDebug('Dataset loaded');
+        resolve();
+    };
+    window.datasetReject = function(err) {
+        appendLoadingDebug('Dataset load failed: ' + (err && err.message));
+        reject(new Error('Failed to load dataset.json'));
+    };
+
+    var script = document.createElement('script');
+    script.src = 'dataset-loader.js';
+    script.onload = function() { appendLoadingDebug('dataset-loader.js loaded'); };
+    script.onerror = function() {
+        appendLoadingDebug('dataset-loader.js failed to load');
+        reject(new Error('Failed to load dataset-loader.js'));
+    };
+    document.head.appendChild(script);
+    appendLoadingDebug('Step 2/3: dataset-loader.js appended');
+});
+
+var datasetLoaded = false;
+datasetPromise.then(function() { datasetLoaded = true; });
+
+setTimeout(function() {
+    if (!datasetLoaded) {
+        appendLoadingDebug('Dataset still loading after 5s');
+        var el = document.getElementById('loading-text');
+        if (el && el.textContent.includes('Loading')) {
+            el.textContent += ' (still loading...)';
+        }
+    }
+}, 5000);
+
+setTimeout(function() {
+    if (!datasetLoaded) {
+        updateLoadingText('Failed to load dataset. Check console.');
+        appendLoadingDebug('Dataset failed to load within 10s');
+    }
+}, 10000);
+
+datasetPromise.then(function() {
+    var isEmpty = Array.isArray(dataset) && dataset.length === 0;
+    if (isEmpty) {
+        updateLoadingText('No data found in dataset.');
         return;
     }
+    updateLoadingText('Processing ' + (Array.isArray(dataset) ? dataset.length : '?') + ' prompts...');
 
-    // Scale word size so a few words don't dominate, but a lot still fit
-    function weightFactor(freq) {
-        // Clamp to a reasonable max/min px size
-        const minPx = 16, maxPx = Math.max(38, 120 - list.length); // Shrink if tons of words
-        // Log scale is more stable for wide freq ranges
-        return Math.max(Math.min(Math.log2(freq + 1) * 16, maxPx), minPx);
-    }
-
-    WordCloud(canvas, {
-        list,
-        weightFactor,
-        gridSize: numWords < 25 ? 6 : 2,
-        backgroundColor: '#fff',
-        color: 'random-dark',
-        rotateRatio: 0,
-        hover: (item, dimension, evt) => {
-            if (tooltip && item) {
-                tooltip.textContent = `${item[0]}: ${item[1]}`;
-                tooltip.style.left = (evt.clientX + 5) + 'px';
-                tooltip.style.top = (evt.clientY + 5) + 'px';
-                tooltip.style.display = 'block';
-            } else if (tooltip) {
-                tooltip.style.display = 'none';
-            }
-        },
-        click: item => {
-            const search = document.getElementById('searchQuery');
-            if (search && item && item[0]) {
-                search.value = item[0];
-                generateSubset();
-            }
-        }
-    });
-}
-
-
-
-
-function safeExecute(name, fn) {
-    try {
-        return fn();
-    } catch (err) {
-        console.error(`Failed to render ${name}:`, err);
-        const div = document.createElement('div');
-        div.style.color = 'red';
-        div.textContent = `Error rendering ${name}: ${err.message || err}`;
-        document.body.appendChild(div);
-    }
-}
-
-let singleChart;
-let currentZoom = 1;
-let lastWordCounts = {};
-const MIN_WORD_FREQ = 3;
-const BASE_WEIGHT_SCALE = 0.15; // reduce word sizes overall
-const WORD_CLOUD_SCALE = 2;     // enlarge canvas area for layout
-
-datasetPromise.then(() => {
-    const container = document.querySelector('.container.my-4');
-    const isEmpty = Array.isArray(dataset) && dataset.length === 0;
-    const msgId = 'no-data-message';
-    if (isEmpty) {
-        updateLoadingText('No data found in dataset.json');
-        if (container && !document.getElementById(msgId)) {
-            const msg = document.createElement('div');
-            msg.id = msgId;
-            msg.className = 'alert alert-warning my-3';
-            msg.textContent = 'No data found in dataset.json';
-            container.insertBefore(msg, container.firstChild);
-        }
-    } else {
-        updateLoadingText(`Processing ${Array.isArray(dataset) ? dataset.length : '?' } prompts...`);
-        const old = document.getElementById(msgId);
-        if (old) old.remove();
-    }
-    // allow DOM update before heavy work
-    setTimeout(() => {
-        const loading = document.getElementById('loading');
+    setTimeout(function() {
+        var loading = document.getElementById('loading');
         if (loading) loading.style.display = 'none';
-        const debugEl = document.getElementById('loading-debug');
-        if (debugEl) debugEl.innerHTML = '';
-        document.getElementById('charts').style.display = 'block';
+
         buildDynamicStopWords(dataset);
-        const singleCounts = countSingleCategories(dataset);
-        const pairCounts = countPairwise(dataset);
-        window.SUGGESTIONS = buildSuggestions(pairCounts);
-        const comboCounts = countCombinations(dataset);
-        showCounts(singleCounts, pairCounts);
-        safeExecute('single category chart', () => { singleChart = drawSingleCategoryChart(singleCounts); });
-        safeExecute('pairwise heatmap', () => drawPairwiseHeatmap(pairCounts));
-        safeExecute('combination chart', () => drawCombinationChart(comboCounts));
+        window.SUGGESTIONS = buildSuggestions(countPairwise(dataset));
+
+        // Pre-compute combination frequencies for surprise metric
+        window.COMBO_FREQS = countCombinations(dataset);
+
+        // Dataset summary paragraph (full names)
+        var total = dataset.length;
+        var singleCounts = countSingleCategories(dataset);
+        var sorted = Object.entries(singleCounts).sort(function(a, b) { return b[1] - a[1]; });
+        var topCat = sorted[0];
+        var botCat = sorted[sorted.length - 1];
+        var summaryEl = document.getElementById('datasetSummary');
+        if (summaryEl) {
+            summaryEl.textContent = total + ' prompts classified across ' + KEYS.length + ' categories. ' +
+                'Most frequent: ' + categoryName(topCat[0]) + ' (n\u2009=\u2009' + topCat[1] + '), ' +
+                'least frequent: ' + categoryName(botCat[0]) + ' (n\u2009=\u2009' + botCat[1] + ').';
+        }
+
         generateSubset();
     }, 10);
-}).catch(err => {
+}).catch(function(err) {
     updateLoadingText('Error loading dataset: ' + (err.message || err));
-    appendLoadingDebug('Failed to load dataset: ' + (err.message || err));
+    appendLoadingDebug('Failed: ' + (err.message || err));
 });
 </script>
 <script>
 if ('serviceWorker' in navigator && /^https?:/.test(location.protocol)) {
-  window.addEventListener('load', () => {
+  window.addEventListener('load', function() {
     navigator.serviceWorker.register('./service-worker.js');
   });
 }
