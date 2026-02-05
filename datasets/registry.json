@@ -1,0 +1,315 @@
+{
+  "datasets": [
+    {
+      "id": "openai",
+      "name": "OpenAI Moderation",
+      "source": "OpenAI moderation-api-release (2022)",
+      "license": "MIT",
+      "paper": "https://arxiv.org/abs/2208.03274",
+      "repo": "https://github.com/openai/moderation-api-release",
+      "file": "datasets/openai.json",
+      "fileJs": "datasets/openai.js",
+      "textField": "prompt",
+      "categories": [
+        {
+          "key": "S",
+          "name": "sexual content",
+          "short": "sexual",
+          "definition": "Content meant to arouse sexual excitement, such as the description of sexual activity, or that promotes sexual services (excluding sex education and wellness)."
+        },
+        {
+          "key": "H",
+          "name": "hate speech",
+          "short": "hate",
+          "definition": "Content that expresses, incites, or promotes hate based on race, gender, ethnicity, religion, nationality, sexual orientation, disability status, or caste."
+        },
+        {
+          "key": "V",
+          "name": "violence",
+          "short": "violence",
+          "definition": "Content that promotes or glorifies violence or celebrates the suffering or humiliation of others."
+        },
+        {
+          "key": "HR",
+          "name": "harassment",
+          "short": "harassment",
+          "definition": "Content that may be used to torment or annoy individuals in real life, or make harassment more likely to occur."
+        },
+        {
+          "key": "SH",
+          "name": "self-harm",
+          "short": "self-harm",
+          "definition": "Content that promotes, encourages, or depicts acts of self-harm, such as suicide, cutting, and eating disorders."
+        },
+        {
+          "key": "S3",
+          "name": "sexual/minors",
+          "short": "sexual/minors",
+          "definition": "Sexual content that includes an individual who is under 18 years old."
+        },
+        {
+          "key": "H2",
+          "name": "hate/threatening",
+          "short": "hate/threat.",
+          "definition": "Hateful content that also includes violence or serious harm towards the targeted group."
+        },
+        {
+          "key": "V2",
+          "name": "violence/graphic",
+          "short": "violence/graphic",
+          "definition": "Violent content that depicts death, violence, or serious physical injury in extreme graphic detail."
+        }
+      ]
+    },
+    {
+      "id": "beavertails",
+      "name": "BeaverTails",
+      "source": "PKU-Alignment (2023)",
+      "license": "CC-BY-NC-4.0",
+      "paper": "https://arxiv.org/abs/2307.04657",
+      "repo": "https://huggingface.co/datasets/PKU-Alignment/BeaverTails",
+      "file": "datasets/beavertails.json",
+      "fileJs": "datasets/beavertails.js",
+      "textField": "prompt",
+      "note": "330K prompt-response pairs classified across 14 harm categories by PKU.",
+      "categories": [
+        {
+          "key": "AA",
+          "name": "animal abuse",
+          "short": "animal abuse",
+          "definition": "Content that promotes or depicts cruelty, harm, or neglect toward animals."
+        },
+        {
+          "key": "CA",
+          "name": "child abuse",
+          "short": "child abuse",
+          "definition": "Content involving harm, exploitation, or endangerment of minors."
+        },
+        {
+          "key": "CT",
+          "name": "controversial topics/politics",
+          "short": "politics",
+          "definition": "Content involving divisive political, social, or ideological topics."
+        },
+        {
+          "key": "DS",
+          "name": "discrimination/stereotype",
+          "short": "discrimination",
+          "definition": "Content that promotes discrimination, stereotypes, or injustice based on group identity."
+        },
+        {
+          "key": "DW",
+          "name": "drug abuse/weapons",
+          "short": "drugs/weapons",
+          "definition": "Content promoting drug abuse, weapons, or banned substances."
+        },
+        {
+          "key": "FC",
+          "name": "financial crime/theft",
+          "short": "financial crime",
+          "definition": "Content related to financial crimes, property crimes, or theft."
+        },
+        {
+          "key": "HS",
+          "name": "hate speech/offensive",
+          "short": "hate/offense",
+          "definition": "Content containing hate speech or offensive language targeting groups or individuals."
+        },
+        {
+          "key": "ME",
+          "name": "misinformation",
+          "short": "misinfo",
+          "definition": "Misinformation regarding ethics, laws, and safety topics."
+        },
+        {
+          "key": "NV",
+          "name": "non-violent unethical behavior",
+          "short": "unethical",
+          "definition": "Content promoting unethical behavior that does not involve physical violence."
+        },
+        {
+          "key": "PV",
+          "name": "privacy violation",
+          "short": "privacy",
+          "definition": "Content that violates or encourages violation of personal privacy."
+        },
+        {
+          "key": "SH",
+          "name": "self-harm",
+          "short": "self-harm",
+          "definition": "Content that promotes, encourages, or depicts acts of self-harm."
+        },
+        {
+          "key": "SE",
+          "name": "sexually explicit/adult",
+          "short": "sexual",
+          "definition": "Sexually explicit or adult content."
+        },
+        {
+          "key": "TC",
+          "name": "terrorism/organized crime",
+          "short": "terrorism",
+          "definition": "Content related to terrorism or organized criminal activities."
+        },
+        {
+          "key": "VI",
+          "name": "violence/incitement",
+          "short": "violence",
+          "definition": "Content that promotes violence, aiding and abetting, or incitement to violence."
+        }
+      ]
+    },
+    {
+      "id": "aegis",
+      "name": "NVIDIA Aegis v2",
+      "source": "NVIDIA (2024)",
+      "license": "CC-BY-4.0",
+      "paper": "https://arxiv.org/abs/2404.05993",
+      "repo": "https://huggingface.co/datasets/nvidia/Aegis-AI-Content-Safety-Dataset-2.0",
+      "file": "datasets/aegis.json",
+      "fileJs": "datasets/aegis.js",
+      "textField": "prompt",
+      "note": "29K human-annotated prompt-response pairs across 23 safety categories.",
+      "categories": [
+        {
+          "key": "CO",
+          "name": "copyright/trademark/plagiarism",
+          "short": "copyright",
+          "definition": "Content involving copyright infringement, trademark violations, or plagiarism."
+        },
+        {
+          "key": "CP",
+          "name": "criminal planning/confessions",
+          "short": "criminal plan.",
+          "definition": "Content involving planning or confessing to criminal activities."
+        },
+        {
+          "key": "CS",
+          "name": "controlled/regulated substances",
+          "short": "substances",
+          "definition": "Content related to controlled or regulated substances."
+        },
+        {
+          "key": "FD",
+          "name": "fraud/deception",
+          "short": "fraud",
+          "definition": "Content involving fraudulent schemes or deceptive practices."
+        },
+        {
+          "key": "GV",
+          "name": "high-risk gov. decisions",
+          "short": "gov. decisions",
+          "definition": "Content related to high-risk government decision-making processes."
+        },
+        {
+          "key": "GW",
+          "name": "guns/illegal weapons",
+          "short": "guns/weapons",
+          "definition": "Content related to guns and illegal weapons."
+        },
+        {
+          "key": "HA",
+          "name": "harassment",
+          "short": "harassment",
+          "definition": "Content intended to harass, bully, or intimidate individuals."
+        },
+        {
+          "key": "HI",
+          "name": "hate/identity hate",
+          "short": "hate",
+          "definition": "Content expressing hate based on identity characteristics."
+        },
+        {
+          "key": "IA",
+          "name": "illegal activity",
+          "short": "illegal act.",
+          "definition": "Content promoting or describing general illegal activities."
+        },
+        {
+          "key": "IU",
+          "name": "immoral/unethical",
+          "short": "unethical",
+          "definition": "Content promoting immoral or unethical behavior."
+        },
+        {
+          "key": "MN",
+          "name": "manipulation",
+          "short": "manipulation",
+          "definition": "Content designed to manipulate or deceive people."
+        },
+        {
+          "key": "MW",
+          "name": "malware",
+          "short": "malware",
+          "definition": "Content related to creating or distributing malicious software."
+        },
+        {
+          "key": "NC",
+          "name": "needs caution",
+          "short": "caution",
+          "definition": "Content that requires careful handling but may not be explicitly harmful."
+        },
+        {
+          "key": "OT",
+          "name": "other",
+          "short": "other",
+          "definition": "Content flagged for safety concerns not covered by other categories."
+        },
+        {
+          "key": "PF",
+          "name": "profanity",
+          "short": "profanity",
+          "definition": "Content containing profane or vulgar language."
+        },
+        {
+          "key": "PI",
+          "name": "PII/privacy",
+          "short": "PII/privacy",
+          "definition": "Content involving personally identifiable information or privacy violations."
+        },
+        {
+          "key": "PM",
+          "name": "political/misinfo/conspiracy",
+          "short": "misinfo",
+          "definition": "Content involving political misinformation or conspiracy theories."
+        },
+        {
+          "key": "SM",
+          "name": "sexual (minor)",
+          "short": "sexual/minor",
+          "definition": "Sexual content involving minors."
+        },
+        {
+          "key": "SS",
+          "name": "suicide/self-harm",
+          "short": "self-harm",
+          "definition": "Content related to suicide or self-harm."
+        },
+        {
+          "key": "SX",
+          "name": "sexual",
+          "short": "sexual",
+          "definition": "Sexually explicit or suggestive content."
+        },
+        {
+          "key": "TH",
+          "name": "threat",
+          "short": "threat",
+          "definition": "Content containing threats of violence or harm."
+        },
+        {
+          "key": "UA",
+          "name": "unauthorized advice",
+          "short": "unauth. advice",
+          "definition": "Content providing unauthorized professional advice (legal, medical, financial)."
+        },
+        {
+          "key": "VL",
+          "name": "violence",
+          "short": "violence",
+          "definition": "Content depicting or promoting violence."
+        }
+      ]
+    }
+  ]
+}

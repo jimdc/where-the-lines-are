@@ -1,56 +1,69 @@
-if (typeof window.appendLoadingDebug === 'function') {
-  appendLoadingDebug('Step 3/5: dataset-loader.js executing (protocol ' + location.protocol + ')');
+/**
+ * Dataset loader for explore-wrongthink.
+ *
+ * Provides loadRegistry() and loadDataset(jsonPath, jsPath) functions.
+ * Supports both file:// (loads .js wrappers) and http(s):// (fetches .json).
+ */
+
+function loadRegistry() {
+    return new Promise(function(resolve, reject) {
+        if (location.protocol === 'file:') {
+            // file:// — load registry.js which defines window.datasetRegistry
+            var script = document.createElement('script');
+            script.src = 'datasets/registry.js';
+            script.onload = function() {
+                if (typeof window.datasetRegistry !== 'undefined') {
+                    resolve(window.datasetRegistry);
+                } else {
+                    reject(new Error('registry.js loaded but datasetRegistry not defined'));
+                }
+            };
+            script.onerror = function() {
+                reject(new Error('Failed to load datasets/registry.js'));
+            };
+            document.head.appendChild(script);
+        } else {
+            fetch('datasets/registry.json')
+                .then(function(r) {
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    return r.json();
+                })
+                .then(resolve)
+                .catch(reject);
+        }
+    });
 }
 
-function handleError(err) {
-  console.error('Failed to load dataset.json', err);
-  if (typeof window.appendLoadingDebug === 'function') {
-    appendLoadingDebug('Error fetching dataset.json: ' + (err.message || err));
-  }
-  if (typeof window.datasetReject === 'function') {
-    window.datasetReject(err);
-  }
-}
-
-if (location.protocol === 'file:') {
-  appendLoadingDebug('Step 4/5: Loading dataset.js');
-  const script = document.createElement('script');
-  script.src = 'dataset.js';
-  script.onload = () => {
-    if (typeof window.appendLoadingDebug === 'function') {
-      const len = Array.isArray(dataset) ? dataset.length : '?';
-      appendLoadingDebug('Step 5/5: dataset.js loaded, length ' + len);
-    }
-    window.dataset = dataset;
-    if (typeof window.datasetResolve === 'function') {
-      window.datasetResolve();
-    }
-  };
-  script.onerror = err => {
-    handleError(err);
-  };
-  document.head.appendChild(script);
-} else {
-  appendLoadingDebug('Step 4/5: Fetching dataset.json');
-  fetch('dataset.json')
-    .then(r => {
-      if (typeof window.appendLoadingDebug === 'function') {
-        appendLoadingDebug('Step 4/5: dataset.json HTTP status ' + r.status);
-      }
-      if (!r.ok) {
-        throw new Error('HTTP ' + r.status + ' ' + r.statusText);
-      }
-      return r.json();
-    })
-    .then(data => {
-      if (typeof window.appendLoadingDebug === 'function') {
-        const len = Array.isArray(data) ? data.length : '?';
-        appendLoadingDebug('Step 5/5: dataset.json parsed, length ' + len);
-      }
-      window.dataset = data;
-      if (typeof window.datasetResolve === 'function') {
-        window.datasetResolve();
-      }
-    })
-    .catch(handleError);
+function loadDataset(jsonPath, jsPath) {
+    return new Promise(function(resolve, reject) {
+        if (location.protocol === 'file:') {
+            // file:// — load .js wrapper which defines dataset_<id>
+            var script = document.createElement('script');
+            script.src = jsPath;
+            script.onload = function() {
+                // The .js file defines a variable like dataset_openai, dataset_beavertails, etc.
+                // Extract the id from the path: "datasets/openai.js" -> "openai"
+                var id = jsPath.replace(/.*\//, '').replace('.js', '');
+                var varName = 'dataset_' + id;
+                if (typeof window[varName] !== 'undefined') {
+                    resolve(window[varName]);
+                } else {
+                    // Fallback: check if generic 'dataset' was set
+                    reject(new Error(jsPath + ' loaded but ' + varName + ' not defined'));
+                }
+            };
+            script.onerror = function() {
+                reject(new Error('Failed to load ' + jsPath));
+            };
+            document.head.appendChild(script);
+        } else {
+            fetch(jsonPath)
+                .then(function(r) {
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    return r.json();
+                })
+                .then(resolve)
+                .catch(reject);
+        }
+    });
 }

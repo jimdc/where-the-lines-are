@@ -7,11 +7,14 @@
 </head>
 <body>
 <div id="loading">
-  <div id="loading-text">Loading dataset...</div>
+  <div id="loading-text">Loading...</div>
   <div id="loading-debug"></div>
 </div>
-<div id="mainContent">
+<div id="mainContent" style="display:none;">
 <h1>Explore-wrongthink</h1>
+
+<div id="datasetSelector"></div>
+
 <p class="danger">Contains potentially disturbing text.</p>
 <p id="datasetSummary" class="muted"></p>
 
@@ -22,16 +25,7 @@
     <thead>
       <tr><th>Category</th><th>Label</th><th>Definition</th></tr>
     </thead>
-    <tbody>
-      <tr><td>sexual</td><td>S</td><td>Content meant to arouse sexual excitement, such as the description of sexual activity, or that promotes sexual services (excluding sex education and wellness).</td></tr>
-      <tr><td>hate</td><td>H</td><td>Content that expresses, incites, or promotes hate based on race, gender, ethnicity, religion, nationality, sexual orientation, disability status, or caste.</td></tr>
-      <tr><td>violence</td><td>V</td><td>Content that promotes or glorifies violence or celebrates the suffering or humiliation of others.</td></tr>
-      <tr><td>harassment</td><td>HR</td><td>Content that may be used to torment or annoy individuals in real life, or make harassment more likely to occur.</td></tr>
-      <tr><td>self-harm</td><td>SH</td><td>Content that promotes, encourages, or depicts acts of self-harm, such as suicide, cutting, and eating disorders.</td></tr>
-      <tr><td>sexual/minors</td><td>S3</td><td>Sexual content that includes an individual who is under 18 years old.</td></tr>
-      <tr><td>hate/threatening</td><td>H2</td><td>Hateful content that also includes violence or serious harm towards the targeted group.</td></tr>
-      <tr><td>violence/graphic</td><td>V2</td><td>Violent content that depicts death, violence, or serious physical injury in extreme graphic detail.</td></tr>
-    </tbody>
+    <tbody></tbody>
   </table>
   </div>
 </details>
@@ -82,7 +76,7 @@
 <div id="matchingLinesSection">
   <h2 id="match-count">0 Matching prompts</h2>
   <p class="hint">Sorted by surprise when unfiltered. Unique combinations appear first.</p>
-  <div class="table-responsive">
+  <div id="resultsVirtual">
     <table id="results">
       <thead>
         <tr>
@@ -93,6 +87,7 @@
       </thead>
       <tbody></tbody>
     </table>
+    <div class="virtual-spacer"></div>
   </div>
 </div>
 
@@ -103,44 +98,33 @@
 
 </div>
 <script src="static/vis.js"></script>
+<script src="dataset-loader.js"></script>
 <script>
-/* ── Category name mappings ── */
-const CATEGORY_NAMES = {
-    'S': 'sexual content',
-    'H': 'hate speech',
-    'V': 'violence',
-    'HR': 'harassment',
-    'SH': 'self-harm',
-    'S3': 'sexual/minors',
-    'H2': 'hate/threatening',
-    'V2': 'violence/graphic'
-};
-const CATEGORY_SHORT = {
-    'S': 'sexual',
-    'H': 'hate',
-    'V': 'violence',
-    'HR': 'harassment',
-    'SH': 'self-harm',
-    'S3': 'sexual/minors',
-    'H2': 'hate/threat.',
-    'V2': 'violence/graphic'
-};
+/* ── Mutable schema variables (populated from registry) ── */
+var activeSchema = null;
+var CATEGORY_KEYS = [];
+var KEYS = [];
+var ALL_FILTER_KEYS = [];
+var CATEGORY_NAMES = {};
+var CATEGORY_SHORT = {};
+var checkboxDefinitionMapping = {};
 
-const CATEGORY_KEYS = ['S', 'H', 'V', 'HR', 'SH', 'S3', 'H2', 'V2'];
-const ALL_FILTER_KEYS = CATEGORY_KEYS.concat(['None']);
-const KEYS = CATEGORY_KEYS;
+function setActiveSchema(entry) {
+    activeSchema = entry;
+    CATEGORY_KEYS = entry.categories.map(function(c) { return c.key; });
+    KEYS = CATEGORY_KEYS;
+    ALL_FILTER_KEYS = CATEGORY_KEYS.concat(['None']);
+    CATEGORY_NAMES = {};
+    CATEGORY_SHORT = {};
+    checkboxDefinitionMapping = {};
+    entry.categories.forEach(function(c) {
+        CATEGORY_NAMES[c.key] = c.name;
+        CATEGORY_SHORT[c.key] = c.short;
+        checkboxDefinitionMapping[c.key] = c.definition;
+    });
+}
 
-const checkboxDefinitionMapping = {
-    'S': 'Content meant to arouse sexual excitement, such as the description of sexual activity, or that promotes sexual services (excluding sex education and wellness).',
-    'H': 'Content that expresses, incites, or promotes hate based on race, gender, ethnicity, religion, nationality, sexual orientation, disability status, or caste.',
-    'V': 'Content that promotes or glorifies violence or celebrates the suffering or humiliation of others.',
-    'HR': 'Content that may be used to torment or annoy individuals in real life, or make harassment more likely to occur.',
-    'SH': 'Content that promotes, encourages, or depicts acts of self-harm, such as suicide, cutting, and eating disorders.',
-    'S3': 'Sexual content that includes an individual who is under 18 years old.',
-    'H2': 'Hateful content that also includes violence or serious harm towards the targeted group.',
-    'V2': 'Violent content that depicts death, violence, or serious physical injury in extreme graphic detail.'
-};
-
+/* ── Loading UI helpers ── */
 function updateLoadingText(msg) {
     var el = document.getElementById('loading-text');
     if (el) el.textContent = msg;
@@ -156,6 +140,17 @@ function appendLoadingDebug(msg) {
     console.log(msg);
 }
 
+function showLoading(msg) {
+    document.getElementById('loading').style.display = '';
+    document.getElementById('mainContent').style.display = 'none';
+    updateLoadingText(msg || 'Loading...');
+}
+
+function hideLoading() {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('mainContent').style.display = '';
+}
+
 /* ── Name helper functions ── */
 function categoryName(key) {
     return CATEGORY_NAMES[key] || key;
@@ -169,12 +164,76 @@ function gloss(key) {
     return CATEGORY_SHORT[key] || key;
 }
 
+/* ── Get prompt text from row (uses schema textField) ── */
+function getPromptText(row) {
+    if (!activeSchema) return row.prompt || '';
+    return row[activeSchema.textField] || row.prompt || '';
+}
+
+/* ── Dynamic definition table ── */
+function rebuildDefTable() {
+    var tbody = document.querySelector('#defTable tbody');
+    tbody.innerHTML = '';
+    KEYS.forEach(function(key) {
+        var tr = document.createElement('tr');
+        var td1 = document.createElement('td');
+        td1.textContent = categoryShort(key);
+        var td2 = document.createElement('td');
+        td2.textContent = key;
+        var td3 = document.createElement('td');
+        td3.textContent = checkboxDefinitionMapping[key] || '';
+        tr.appendChild(td1);
+        tr.appendChild(td2);
+        tr.appendChild(td3);
+        tbody.appendChild(tr);
+    });
+}
+
+/* ── Dataset Selector UI ── */
+var registry = null;
+
+function renderDatasetSelector(activeId) {
+    var container = document.getElementById('datasetSelector');
+    container.innerHTML = '';
+    if (!registry || !registry.datasets) return;
+
+    registry.datasets.forEach(function(ds) {
+        var panel = document.createElement('div');
+        panel.className = 'dataset-panel' + (ds.id === activeId ? ' dataset-panel-active' : '');
+        panel.dataset.id = ds.id;
+
+        var name = document.createElement('div');
+        name.className = 'dataset-panel-name';
+        name.textContent = ds.name;
+        panel.appendChild(name);
+
+        var meta = document.createElement('div');
+        meta.className = 'dataset-panel-meta';
+        meta.textContent = ds.categories.length + ' categories \u00B7 ' + ds.source;
+        panel.appendChild(meta);
+
+        var license = document.createElement('div');
+        license.className = 'dataset-panel-license';
+        license.textContent = ds.license;
+        panel.appendChild(license);
+
+        panel.addEventListener('click', function() {
+            if (ds.id !== activeId) {
+                switchDataset(ds.id);
+            }
+        });
+
+        container.appendChild(panel);
+    });
+}
+
 /* ── Category Pills ── */
 var pillStates = {};
 
 function buildCategoryPills() {
     var container = document.getElementById('categoryPills');
     container.innerHTML = '';
+    pillStates = {};
 
     ALL_FILTER_KEYS.forEach(function(key) {
         pillStates[key] = 'Any';
@@ -392,10 +451,12 @@ var stopWords = new Set(defaultStopWords);
 
 function buildDynamicStopWords(data, topN) {
     topN = topN || 50;
+    var textField = (activeSchema && activeSchema.textField) || 'prompt';
     var counts = {};
     data.forEach(function(row) {
-        if (!row.prompt) return;
-        var words = row.prompt.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
+        var text = row[textField] || row.prompt || '';
+        if (!text) return;
+        var words = text.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
         words.forEach(function(w) {
             if (w && !defaultStopWords.includes(w) && !/^\d+$/.test(w)) {
                 counts[w] = (counts[w] || 0) + 1;
@@ -407,10 +468,12 @@ function buildDynamicStopWords(data, topN) {
 }
 
 function computeWordCounts(data) {
+    var textField = (activeSchema && activeSchema.textField) || 'prompt';
     var counts = {};
     data.forEach(function(row) {
-        if (!row.prompt) return;
-        var words = row.prompt.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
+        var text = row[textField] || row.prompt || '';
+        if (!text) return;
+        var words = text.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
         words.forEach(function(w) {
             if (w && !stopWords.has(w) && !/^\d+$/.test(w)) {
                 counts[w] = (counts[w] || 0) + 1;
@@ -418,6 +481,140 @@ function computeWordCounts(data) {
         });
     });
     return counts;
+}
+
+/* ── Virtual Scrolling ── */
+var VIRTUAL_ROW_HEIGHT = 42;
+var VIRTUAL_BUFFER = 10;
+var currentSubset = [];
+var currentRawQuery = '';
+var currentMaxSurprise = 1;
+
+function buildResultRow(row, rawQuery, maxSurprise) {
+    var tr = document.createElement('tr');
+    var prompt = getPromptText(row);
+
+    // Prompt cell
+    var td1 = document.createElement('td');
+    td1.innerHTML = highlightPrompt(prompt || 'N/A', rawQuery);
+    tr.appendChild(td1);
+
+    // Surprise cell
+    var tdS = document.createElement('td');
+    tdS.className = 'surprise-cell';
+    if (window.COMBO_FREQS) {
+        var score = computeSurpriseScore(row);
+        var combo = getComboKey(row);
+        var freq = window.COMBO_FREQS[combo] || 1;
+        var barW = Math.round((score / maxSurprise) * 40);
+
+        var bar = document.createElement('span');
+        bar.className = 'surprise-bar';
+        bar.style.width = barW + 'px';
+        tdS.appendChild(bar);
+
+        var label = document.createElement('span');
+        label.className = 'surprise-label';
+        if (freq === 1) {
+            label.textContent = 'unique';
+        } else if (freq <= 5) {
+            label.textContent = 'rare (' + freq + ')';
+        } else {
+            label.textContent = String(freq);
+        }
+        tdS.appendChild(label);
+    }
+    tr.appendChild(tdS);
+
+    // Category pills cell
+    var td2 = document.createElement('td');
+    td2.className = 'cat-cell';
+    var flagged = KEYS.filter(function(k) { return row[k] === 1; });
+    if (flagged.length === 0) {
+        var noneSpan = document.createElement('span');
+        noneSpan.className = 'pill-sm pill-none';
+        noneSpan.textContent = 'none';
+        td2.appendChild(noneSpan);
+    } else {
+        flagged.forEach(function(k) {
+            var span = document.createElement('span');
+            span.className = 'pill-sm';
+            span.textContent = categoryShort(k);
+            td2.appendChild(span);
+        });
+    }
+    tr.appendChild(td2);
+    return tr;
+}
+
+function renderVirtualTable() {
+    var container = document.getElementById('resultsVirtual');
+    var subset = currentSubset;
+    var rawQuery = currentRawQuery;
+    var maxSurprise = currentMaxSurprise;
+
+    var totalHeight = subset.length * VIRTUAL_ROW_HEIGHT;
+    container.querySelector('.virtual-spacer').style.height = totalHeight + 'px';
+
+    var scrollTop = container.scrollTop;
+    var viewportH = container.clientHeight;
+    var startIdx = Math.max(0, Math.floor(scrollTop / VIRTUAL_ROW_HEIGHT) - VIRTUAL_BUFFER);
+    var endIdx = Math.min(subset.length, Math.ceil((scrollTop + viewportH) / VIRTUAL_ROW_HEIGHT) + VIRTUAL_BUFFER);
+
+    var tbody = container.querySelector('tbody');
+    tbody.innerHTML = '';
+
+    // Top spacer row
+    if (startIdx > 0) {
+        var spacerRow = document.createElement('tr');
+        var spacerTd = document.createElement('td');
+        spacerTd.colSpan = 3;
+        spacerTd.style.height = (startIdx * VIRTUAL_ROW_HEIGHT) + 'px';
+        spacerTd.style.padding = '0';
+        spacerTd.style.border = 'none';
+        spacerRow.appendChild(spacerTd);
+        tbody.appendChild(spacerRow);
+    }
+
+    // Visible rows
+    for (var i = startIdx; i < endIdx; i++) {
+        tbody.appendChild(buildResultRow(subset[i], rawQuery, maxSurprise));
+    }
+
+    // Bottom spacer row
+    if (endIdx < subset.length) {
+        var spacerRow2 = document.createElement('tr');
+        var spacerTd2 = document.createElement('td');
+        spacerTd2.colSpan = 3;
+        spacerTd2.style.height = ((subset.length - endIdx) * VIRTUAL_ROW_HEIGHT) + 'px';
+        spacerTd2.style.padding = '0';
+        spacerTd2.style.border = 'none';
+        spacerRow2.appendChild(spacerTd2);
+        tbody.appendChild(spacerRow2);
+    }
+
+    // Show empty state
+    if (subset.length === 0) {
+        var tr = document.createElement('tr');
+        var td = document.createElement('td');
+        td.colSpan = 3;
+        td.textContent = 'No results. Try relaxing the filters.';
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+    }
+}
+
+// Attach scroll handler (once)
+var virtualScrollAttached = false;
+function attachVirtualScroll() {
+    if (virtualScrollAttached) return;
+    virtualScrollAttached = true;
+    var container = document.getElementById('resultsVirtual');
+    var scrollTimer = null;
+    container.addEventListener('scroll', function() {
+        if (scrollTimer) cancelAnimationFrame(scrollTimer);
+        scrollTimer = requestAnimationFrame(renderVirtualTable);
+    });
 }
 
 /* ── Visualization updates ── */
@@ -510,6 +707,7 @@ function generateSubset(event) {
     if (event) event.preventDefault();
     var rawQuery = document.getElementById('searchQuery').value.trim();
     var query = rawQuery.toLowerCase();
+    var textField = (activeSchema && activeSchema.textField) || 'prompt';
 
     var values = {};
     ALL_FILTER_KEYS.forEach(function(key) {
@@ -526,7 +724,8 @@ function generateSubset(event) {
             if (selected === 'Exclude') return rowValue === '0';
             return true;
         });
-        return match && (query === '' || (row.prompt && row.prompt.toLowerCase().includes(query)));
+        var text = row[textField] || row.prompt || '';
+        return match && (query === '' || text.toLowerCase().includes(query));
     });
 
     // Determine if default (unfiltered) view for surprise sorting
@@ -550,169 +749,103 @@ function generateSubset(event) {
     }
     if (maxSurprise === 0) maxSurprise = 1;
 
-    // Build results table with surprise column and category pills
-    document.getElementById('match-count').textContent = subset.length + ' Matching prompts';
-    var tbody = document.querySelector('#results tbody');
-    tbody.innerHTML = '';
-    subset.forEach(function(row) {
-        var tr = document.createElement('tr');
+    // Update virtual scroll state and render
+    document.getElementById('match-count').textContent = subset.length.toLocaleString() + ' Matching prompts';
+    currentSubset = subset;
+    currentRawQuery = rawQuery;
+    currentMaxSurprise = maxSurprise;
 
-        // Prompt cell
-        var td1 = document.createElement('td');
-        td1.innerHTML = highlightPrompt(row.prompt || 'N/A', rawQuery);
-        tr.appendChild(td1);
-
-        // Surprise cell
-        var tdS = document.createElement('td');
-        tdS.className = 'surprise-cell';
-        if (window.COMBO_FREQS) {
-            var score = computeSurpriseScore(row);
-            var combo = getComboKey(row);
-            var freq = window.COMBO_FREQS[combo] || 1;
-            var barW = Math.round((score / maxSurprise) * 40);
-
-            var bar = document.createElement('span');
-            bar.className = 'surprise-bar';
-            bar.style.width = barW + 'px';
-            tdS.appendChild(bar);
-
-            var label = document.createElement('span');
-            label.className = 'surprise-label';
-            if (freq === 1) {
-                label.textContent = 'unique';
-            } else if (freq <= 5) {
-                label.textContent = 'rare (' + freq + ')';
-            } else {
-                label.textContent = String(freq);
-            }
-            tdS.appendChild(label);
-        }
-        tr.appendChild(tdS);
-
-        // Category pills cell
-        var td2 = document.createElement('td');
-        td2.className = 'cat-cell';
-        var flagged = KEYS.filter(function(k) { return row[k] === 1; });
-        if (flagged.length === 0) {
-            var noneSpan = document.createElement('span');
-            noneSpan.className = 'pill-sm pill-none';
-            noneSpan.textContent = 'none';
-            td2.appendChild(noneSpan);
-        } else {
-            flagged.forEach(function(k) {
-                var span = document.createElement('span');
-                span.className = 'pill-sm';
-                span.textContent = categoryShort(k);
-                td2.appendChild(span);
-            });
-        }
-        tr.appendChild(td2);
-        tbody.appendChild(tr);
-    });
-
-    if (subset.length === 0) {
-        var tr = document.createElement('tr');
-        var td = document.createElement('td');
-        td.colSpan = 3;
-        td.textContent = 'No results. Try relaxing the filters.';
-        tr.appendChild(td);
-        tbody.appendChild(tr);
-    }
+    // Reset scroll position and render
+    var container = document.getElementById('resultsVirtual');
+    container.scrollTop = 0;
+    renderVirtualTable();
+    attachVirtualScroll();
 
     updateVisualizations(subset);
 }
 
-/* ── Initialize pills + search ── */
-buildCategoryPills();
+/* ── Dataset Switching ── */
+function switchDataset(id) {
+    var entry = registry.datasets.find(function(d) { return d.id === id; });
+    if (!entry) {
+        console.error('Dataset not found:', id);
+        return;
+    }
+
+    setActiveSchema(entry);
+    rebuildDefTable();
+    buildCategoryPills();
+    renderDatasetSelector(id);
+    showLoading('Loading ' + entry.name + '...');
+
+    loadDataset(entry.file, entry.fileJs).then(function(data) {
+        window.dataset = data;
+        hideLoading();
+
+        // Reset stop words before rebuilding
+        stopWords = new Set(defaultStopWords);
+        buildDynamicStopWords(data);
+        window.SUGGESTIONS = buildSuggestions(countPairwise(data));
+        window.COMBO_FREQS = countCombinations(data);
+
+        // Dataset summary paragraph
+        updateSummaryParagraph(entry, data);
+
+        // Reset filters and search
+        resetPills();
+        document.getElementById('searchQuery').value = '';
+        document.getElementById('wordBreakdownPanel').innerHTML = '';
+
+        generateSubset();
+        history.replaceState(null, '', '#' + id);
+    }).catch(function(err) {
+        updateLoadingText('Error loading ' + entry.name + ': ' + (err.message || err));
+        console.error(err);
+    });
+}
+
+function updateSummaryParagraph(entry, data) {
+    var total = data.length;
+    var singleCounts = countSingleCategories(data);
+    var sorted = Object.entries(singleCounts).sort(function(a, b) { return b[1] - a[1]; });
+    var topCat = sorted[0];
+    var botCat = sorted[sorted.length - 1];
+    var summaryEl = document.getElementById('datasetSummary');
+    if (summaryEl) {
+        var text = total.toLocaleString() + ' prompts classified across ' + KEYS.length + ' categories. ' +
+            'Most frequent: ' + categoryName(topCat[0]) + ' (n\u2009=\u2009' + topCat[1].toLocaleString() + '), ' +
+            'least frequent: ' + categoryName(botCat[0]) + ' (n\u2009=\u2009' + botCat[1].toLocaleString() + ').';
+        if (entry.note) {
+            text += ' ' + entry.note;
+        }
+        summaryEl.textContent = text;
+    }
+}
+
+/* ── Initialize search handler ── */
 document.getElementById('searchQuery').addEventListener('input', function() {
-    // Clear word breakdown when user types manually
     var panel = document.getElementById('wordBreakdownPanel');
     if (panel) panel.innerHTML = '';
     generateSubset();
 });
 
-/* ── Dataset loading ── */
-var datasetPromise = new Promise(function(resolve, reject) {
-    console.log('Initializing dataset load');
-    updateLoadingText('Loading dataset...');
-    appendLoadingDebug('Step 1/3: datasetPromise started');
+/* ── Boot: load registry then default dataset ── */
+showLoading('Loading dataset registry...');
 
-    window.datasetResolve = function() {
-        appendLoadingDebug('Dataset loaded');
-        resolve();
-    };
-    window.datasetReject = function(err) {
-        appendLoadingDebug('Dataset load failed: ' + (err && err.message));
-        reject(new Error('Failed to load dataset.json'));
-    };
+loadRegistry().then(function(reg) {
+    registry = reg;
 
-    var script = document.createElement('script');
-    script.src = 'dataset-loader.js';
-    script.onload = function() { appendLoadingDebug('dataset-loader.js loaded'); };
-    script.onerror = function() {
-        appendLoadingDebug('dataset-loader.js failed to load');
-        reject(new Error('Failed to load dataset-loader.js'));
-    };
-    document.head.appendChild(script);
-    appendLoadingDebug('Step 2/3: dataset-loader.js appended');
-});
-
-var datasetLoaded = false;
-datasetPromise.then(function() { datasetLoaded = true; });
-
-setTimeout(function() {
-    if (!datasetLoaded) {
-        appendLoadingDebug('Dataset still loading after 5s');
-        var el = document.getElementById('loading-text');
-        if (el && el.textContent.includes('Loading')) {
-            el.textContent += ' (still loading...)';
-        }
+    // Determine initial dataset from URL hash
+    var hash = location.hash.replace('#', '');
+    var defaultId = 'openai';
+    if (hash && reg.datasets.some(function(d) { return d.id === hash; })) {
+        defaultId = hash;
     }
-}, 5000);
 
-setTimeout(function() {
-    if (!datasetLoaded) {
-        updateLoadingText('Failed to load dataset. Check console.');
-        appendLoadingDebug('Dataset failed to load within 10s');
-    }
-}, 10000);
-
-datasetPromise.then(function() {
-    var isEmpty = Array.isArray(dataset) && dataset.length === 0;
-    if (isEmpty) {
-        updateLoadingText('No data found in dataset.');
-        return;
-    }
-    updateLoadingText('Processing ' + (Array.isArray(dataset) ? dataset.length : '?') + ' prompts...');
-
-    setTimeout(function() {
-        var loading = document.getElementById('loading');
-        if (loading) loading.style.display = 'none';
-
-        buildDynamicStopWords(dataset);
-        window.SUGGESTIONS = buildSuggestions(countPairwise(dataset));
-
-        // Pre-compute combination frequencies for surprise metric
-        window.COMBO_FREQS = countCombinations(dataset);
-
-        // Dataset summary paragraph (full names)
-        var total = dataset.length;
-        var singleCounts = countSingleCategories(dataset);
-        var sorted = Object.entries(singleCounts).sort(function(a, b) { return b[1] - a[1]; });
-        var topCat = sorted[0];
-        var botCat = sorted[sorted.length - 1];
-        var summaryEl = document.getElementById('datasetSummary');
-        if (summaryEl) {
-            summaryEl.textContent = total + ' prompts classified across ' + KEYS.length + ' categories. ' +
-                'Most frequent: ' + categoryName(topCat[0]) + ' (n\u2009=\u2009' + topCat[1] + '), ' +
-                'least frequent: ' + categoryName(botCat[0]) + ' (n\u2009=\u2009' + botCat[1] + ').';
-        }
-
-        generateSubset();
-    }, 10);
+    switchDataset(defaultId);
 }).catch(function(err) {
-    updateLoadingText('Error loading dataset: ' + (err.message || err));
-    appendLoadingDebug('Failed: ' + (err.message || err));
+    updateLoadingText('Error loading registry: ' + (err.message || err));
+    console.error(err);
 });
 </script>
 <script>
