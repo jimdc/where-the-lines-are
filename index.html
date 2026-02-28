@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Explore-wrongthink</title>
+    <title>Where the Lines Are</title>
     <link rel="stylesheet" href="static/styles.css">
 </head>
 <body>
@@ -11,9 +11,24 @@
   <div id="loading-debug"></div>
 </div>
 <div id="mainContent" style="display:none;">
-<h1>Explore-wrongthink</h1>
+<h1>Where the Lines Are</h1>
 
 <div id="datasetSelector"></div>
+
+<div id="rosettaSection">
+  <h2>Rosetta stone</h2>
+  <p class="hint">How five taxonomies slice the same space. Each row is a concept; columns are datasets.</p>
+  <div id="rosettaTable" class="table-responsive"></div>
+</div>
+
+<div id="driftSection">
+  <h2>Drift</h2>
+  <p class="hint">The taxonomy grew from 6 to 23 categories across 2018–2024. Bold = first appearance.</p>
+  <canvas id="timelineCanvas"></canvas>
+  <h3>Exclusivity trend</h3>
+  <p class="hint">Dark bar = avg. category exclusivity. Light bar = multi-label rate. Higher exclusivity = categories more often flagged alone.</p>
+  <canvas id="exclusivityTrendCanvas"></canvas>
+</div>
 
 <p class="danger">Contains potentially disturbing text.</p>
 <p id="datasetSummary" class="muted"></p>
@@ -36,6 +51,19 @@
 <h2>Category exclusivity</h2>
 <p class="hint">Dark = flagged for this category alone. Light = shared with other categories.</p>
 <div id="exclusivitySection"><canvas id="exclusivityCanvas"></canvas></div>
+
+<div id="splitVerdictSection" style="display:none;">
+  <h2>Split verdict</h2>
+  <p class="hint" id="splitVerdictHint"></p>
+  <canvas id="splitVerdictCanvas"></canvas>
+  <p id="splitVerdictExtra" class="muted" style="display:none;"></p>
+</div>
+
+<div id="consensusSection" style="display:none;">
+  <h2>Consensus</h2>
+  <p class="hint" id="consensusHint"></p>
+  <canvas id="consensusCanvas"></canvas>
+</div>
 
 <p class="hint">Click a category to focus on it. Click the matrix below to explore overlaps.</p>
 
@@ -91,6 +119,13 @@
   </div>
 </div>
 
+<div id="xrefPanel" style="display:none;">
+  <h2>Doppelganger</h2>
+  <p class="hint">Same prompt, different taxonomies. Category labels from each dataset.</p>
+  <div id="xrefContent"></div>
+  <button id="xrefClose" class="btn" style="margin-top:0.5rem;">Close</button>
+</div>
+
 <h2>Category combination frequencies</h2>
 <div id="comboSection">
   <canvas id="comboCanvas"></canvas>
@@ -108,6 +143,22 @@ var ALL_FILTER_KEYS = [];
 var CATEGORY_NAMES = {};
 var CATEGORY_SHORT = {};
 var checkboxDefinitionMapping = {};
+
+/* ── Cross-dataset (xref) globals ── */
+var XREF_DATA = [];
+var XREF_INDEX = {}; // normalized prompt → xref entry
+
+function buildXrefIndex(xrefArray) {
+    XREF_DATA = xrefArray || [];
+    XREF_INDEX = {};
+    XREF_DATA.forEach(function(entry) {
+        XREF_INDEX[entry.prompt] = entry;
+    });
+}
+
+function normalizePrompt(text) {
+    return (text || '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
 
 function setActiveSchema(entry) {
     activeSchema = entry;
@@ -386,6 +437,298 @@ function countExclusivity(data) {
     return { exclusive: exclusive, shared: shared };
 }
 
+/* ── Divergence computation (Split Verdict) ── */
+function computeCohensKappa(a11, a10, a01, a00) {
+    // a11=both agree yes, a10=r0 yes r1 no, a01=r0 no r1 yes, a00=both agree no
+    var total = a11 + a10 + a01 + a00;
+    if (total === 0) return 0;
+    var po = (a11 + a00) / total; // observed agreement
+    var pe1 = ((a11 + a10) / total) * ((a11 + a01) / total);
+    var pe0 = ((a00 + a01) / total) * ((a00 + a10) / total);
+    var pe = pe1 + pe0; // expected agreement
+    if (pe >= 1) return 1;
+    return (po - pe) / (1 - pe);
+}
+
+function computeResponseDivergence(data, keys, prefixes) {
+    // For SafeRLHF: compare _r0_XX vs _r1_XX per category
+    var p0 = prefixes[0]; // '_r0_'
+    var p1 = prefixes[1]; // '_r1_'
+    var results = [];
+
+    keys.forEach(function(k) {
+        var a11 = 0, a10 = 0, a01 = 0, a00 = 0;
+        data.forEach(function(row) {
+            var v0 = row[p0 + k] || 0;
+            var v1 = row[p1 + k] || 0;
+            if (v0 === 1 && v1 === 1) a11++;
+            else if (v0 === 1 && v1 === 0) a10++;
+            else if (v0 === 0 && v1 === 1) a01++;
+            else a00++;
+        });
+        var agree = a11 + a00;
+        var disagree = a10 + a01;
+        var kappa = computeCohensKappa(a11, a10, a01, a00);
+        results.push({ key: k, agree: agree, disagree: disagree, kappa: kappa });
+    });
+
+    // Sort by disagreement rate descending (most contested first)
+    results.sort(function(a, b) {
+        var rateA = a.disagree / (a.agree + a.disagree);
+        var rateB = b.disagree / (b.agree + b.disagree);
+        return rateB - rateA;
+    });
+
+    return results;
+}
+
+function computePromptVsResponseDivergence(data) {
+    // For Aegis: compare _pl (prompt label) vs _rl (response label)
+    var total = data.length;
+    var bothUnsafe = 0, promptUnsafeOnly = 0, responseUnsafeOnly = 0, bothSafe = 0;
+    var bySource = {}; // source -> {agree, disagree}
+
+    data.forEach(function(row) {
+        var pl = row._pl || 'safe';
+        var rl = row._rl || 'safe';
+        var pUnsafe = pl !== 'safe';
+        var rUnsafe = rl !== 'safe';
+
+        if (pUnsafe && rUnsafe) bothUnsafe++;
+        else if (pUnsafe && !rUnsafe) promptUnsafeOnly++;
+        else if (!pUnsafe && rUnsafe) responseUnsafeOnly++;
+        else bothSafe++;
+
+        // Track by label source
+        var src = row._rls || 'unknown';
+        if (!bySource[src]) bySource[src] = { agree: 0, disagree: 0 };
+        if ((pUnsafe && rUnsafe) || (!pUnsafe && !rUnsafe)) {
+            bySource[src].agree++;
+        } else {
+            bySource[src].disagree++;
+        }
+    });
+
+    return {
+        total: total,
+        bothUnsafe: bothUnsafe,
+        promptUnsafeOnly: promptUnsafeOnly,
+        responseUnsafeOnly: responseUnsafeOnly,
+        bothSafe: bothSafe,
+        bySource: bySource
+    };
+}
+
+function renderSplitVerdict(entry, data) {
+    var section = document.getElementById('splitVerdictSection');
+    var canvas = document.getElementById('splitVerdictCanvas');
+    var hint = document.getElementById('splitVerdictHint');
+    var extra = document.getElementById('splitVerdictExtra');
+
+    var df = entry.divergenceFields;
+    if (!df) {
+        section.style.display = 'none';
+        return;
+    }
+
+    section.style.display = '';
+
+    if (df.type === 'response_pair') {
+        // SafeRLHF: per-category divergence between response_0 and response_1
+        hint.textContent = 'Per-category agreement between two independently classified responses. Dark = agree. Light = diverge. Sorted by disagreement rate.';
+        var results = computeResponseDivergence(data, KEYS, df.prefixes);
+        drawDivergenceChart(canvas, results, KEYS, {}, categoryShort);
+
+        // Extra stats: safer vs better disagreement
+        var saferBetterDisagree = 0;
+        var saferBetterTotal = 0;
+        data.forEach(function(row) {
+            var s = row._safer;
+            var b = row._better;
+            if (s !== undefined && b !== undefined && s !== -1 && b !== -1) {
+                saferBetterTotal++;
+                if (s !== b) saferBetterDisagree++;
+            }
+        });
+        if (saferBetterTotal > 0) {
+            var pct = Math.round(saferBetterDisagree / saferBetterTotal * 100);
+            extra.style.display = '';
+            extra.textContent = 'Safer \u2260 better response: ' + pct + '% of ' + saferBetterTotal.toLocaleString() + ' rows (' + saferBetterDisagree.toLocaleString() + ' disagree). The "safer" response is not always the "better" one.';
+        } else {
+            extra.style.display = 'none';
+        }
+
+    } else if (df.type === 'prompt_vs_response') {
+        // Aegis: prompt safety vs response safety
+        hint.textContent = 'Prompt safety label vs response safety label. Shows how often the prompt is flagged unsafe but the response is flagged safe, and vice versa.';
+        var pvr = computePromptVsResponseDivergence(data);
+        var agreePct = Math.round((pvr.bothUnsafe + pvr.bothSafe) / pvr.total * 100);
+
+        // Build divergence data as rows for the chart: one row per label source
+        // Recompute per-source with proper 2x2 tables
+        var sourceData = {};
+        data.forEach(function(row) {
+            var src = row._rls || 'unknown';
+            if (!src || src === 'unknown') return;
+            if (!sourceData[src]) sourceData[src] = { a11: 0, a10: 0, a01: 0, a00: 0 };
+            var pU = (row._pl || 'safe') !== 'safe';
+            var rU = (row._rl || 'safe') !== 'safe';
+            if (pU && rU) sourceData[src].a11++;
+            else if (pU && !rU) sourceData[src].a10++;
+            else if (!pU && rU) sourceData[src].a01++;
+            else sourceData[src].a00++;
+        });
+
+        var sourceResults = [];
+        Object.keys(sourceData).sort().forEach(function(src) {
+            var s = sourceData[src];
+            var agree = s.a11 + s.a00;
+            var disagree = s.a10 + s.a01;
+            sourceResults.push({
+                key: src,
+                agree: agree,
+                disagree: disagree,
+                kappa: computeCohensKappa(s.a11, s.a10, s.a01, s.a00)
+            });
+        });
+
+        // Also add overall row with proper kappa
+        sourceResults.unshift({
+            key: 'overall',
+            agree: pvr.bothUnsafe + pvr.bothSafe,
+            disagree: pvr.promptUnsafeOnly + pvr.responseUnsafeOnly,
+            kappa: computeCohensKappa(pvr.bothUnsafe, pvr.promptUnsafeOnly, pvr.responseUnsafeOnly, pvr.bothSafe)
+        });
+
+        var sourceNameMap = {
+            'overall': 'overall',
+            'human': 'human',
+            'llm_jury': 'LLM jury',
+            'refusal_data_augmentation': 'refusal augment.'
+        };
+        drawDivergenceChart(canvas, sourceResults, [], {}, function(k) { return sourceNameMap[k] || k; });
+
+        extra.style.display = '';
+        extra.textContent = 'Prompt unsafe + response safe: ' + pvr.promptUnsafeOnly.toLocaleString() +
+            ' (' + Math.round(pvr.promptUnsafeOnly / pvr.total * 100) + '%). ' +
+            'Prompt safe + response unsafe: ' + pvr.responseUnsafeOnly.toLocaleString() +
+            ' (' + Math.round(pvr.responseUnsafeOnly / pvr.total * 100) + '%). ' +
+            'Both agree: ' + agreePct + '%.';
+    } else {
+        section.style.display = 'none';
+    }
+}
+
+/* ── Cross-dataset agreement (Consensus) ── */
+function computeCrossDatasetAgreement(currentDatasetId, registry) {
+    // For shared prompts in XREF_DATA that include currentDatasetId,
+    // check concept-level agreement with other datasets
+    if (!XREF_DATA.length || !registry) return [];
+
+    // Build category→concepts lookup per dataset
+    var dsConcepts = {};
+    registry.datasets.forEach(function(ds) {
+        var map = {};
+        ds.categories.forEach(function(cat) {
+            var concepts = cat.concept;
+            if (!concepts) return;
+            if (!Array.isArray(concepts)) concepts = [concepts];
+            map[cat.key] = concepts;
+        });
+        dsConcepts[ds.id] = map;
+    });
+
+    // For each shared prompt, get concept sets for current dataset vs each other dataset
+    var conceptAgreement = {}; // concept → {agree, disagree}
+
+    XREF_DATA.forEach(function(entry) {
+        var currentMatch = null;
+        var otherMatches = [];
+        entry.matches.forEach(function(m) {
+            if (m.dataset === currentDatasetId) currentMatch = m;
+            else otherMatches.push(m);
+        });
+        if (!currentMatch || !otherMatches.length) return;
+
+        // Get concepts for current dataset's categories
+        var currentConcepts = new Set();
+        var curMap = dsConcepts[currentDatasetId] || {};
+        currentMatch.cats.forEach(function(catKey) {
+            var concepts = curMap[catKey];
+            if (concepts) concepts.forEach(function(c) { currentConcepts.add(c); });
+        });
+
+        // Compare with each other dataset
+        otherMatches.forEach(function(other) {
+            var otherConcepts = new Set();
+            var otherMap = dsConcepts[other.dataset] || {};
+            other.cats.forEach(function(catKey) {
+                var concepts = otherMap[catKey];
+                if (concepts) concepts.forEach(function(c) { otherConcepts.add(c); });
+            });
+
+            // Union of all concepts from both
+            var allConcepts = new Set();
+            currentConcepts.forEach(function(c) { allConcepts.add(c); });
+            otherConcepts.forEach(function(c) { allConcepts.add(c); });
+
+            allConcepts.forEach(function(concept) {
+                if (!conceptAgreement[concept]) conceptAgreement[concept] = { agree: 0, disagree: 0 };
+                var inCurrent = currentConcepts.has(concept);
+                var inOther = otherConcepts.has(concept);
+                if (inCurrent === inOther) {
+                    conceptAgreement[concept].agree++;
+                } else {
+                    conceptAgreement[concept].disagree++;
+                }
+            });
+        });
+    });
+
+    // Convert to sorted array (most disagreement first)
+    var results = Object.keys(conceptAgreement).map(function(concept) {
+        return {
+            key: concept,
+            agree: conceptAgreement[concept].agree,
+            disagree: conceptAgreement[concept].disagree
+        };
+    });
+    results.sort(function(a, b) {
+        var rateA = a.disagree / (a.agree + a.disagree);
+        var rateB = b.disagree / (b.agree + b.disagree);
+        return rateB - rateA;
+    });
+    return results;
+}
+
+function renderConsensus(entry, data) {
+    var section = document.getElementById('consensusSection');
+    var canvas = document.getElementById('consensusCanvas');
+    var hint = document.getElementById('consensusHint');
+
+    // Check if we have enough xref data for this dataset (min 20 shared prompts)
+    var sharedCount = XREF_DATA.filter(function(x) {
+        return x.matches.some(function(m) { return m.dataset === entry.id; });
+    }).length;
+
+    if (sharedCount < 20) {
+        section.style.display = 'none';
+        return;
+    }
+
+    var crossData = computeCrossDatasetAgreement(entry.id, registry);
+    if (!crossData.length) {
+        section.style.display = 'none';
+        return;
+    }
+
+    section.style.display = '';
+    hint.textContent = 'Concept-level agreement on ' + sharedCount.toLocaleString() +
+        ' prompts shared with other datasets. Do different taxonomies flag the same concepts?';
+
+    drawAgreementSummary(canvas, crossData, function(k) { return k; });
+}
+
 /* ── Surprise metric helpers ── */
 function getComboKey(row) {
     var flagged = KEYS.filter(function(k) { return row[k] === 1; }).sort();
@@ -496,7 +839,17 @@ function buildResultRow(row, rawQuery, maxSurprise) {
 
     // Prompt cell
     var td1 = document.createElement('td');
-    td1.innerHTML = highlightPrompt(prompt || 'N/A', rawQuery);
+    var promptHtml = highlightPrompt(prompt || 'N/A', rawQuery);
+
+    // Check xref match
+    var normP = normalizePrompt(prompt);
+    var xrefMatch = XREF_INDEX[normP];
+    if (xrefMatch && xrefMatch.matches.length > 1) {
+        promptHtml += ' <span class="xref-indicator" data-prompt="' +
+            normP.replace(/"/g, '&quot;') + '">\u2194\uFE0E ' +
+            xrefMatch.matches.length + ' datasets</span>';
+    }
+    td1.innerHTML = promptHtml;
     tr.appendChild(td1);
 
     // Surprise cell
@@ -791,6 +1144,15 @@ function switchDataset(id) {
         // Dataset summary paragraph
         updateSummaryParagraph(entry, data);
 
+        // Split Verdict (divergence, per-dataset conditional)
+        renderSplitVerdict(entry, data);
+
+        // Consensus (cross-dataset agreement, conditional)
+        renderConsensus(entry, data);
+
+        // Hide xref panel on dataset switch
+        document.getElementById('xrefPanel').style.display = 'none';
+
         // Reset filters and search
         resetPills();
         document.getElementById('searchQuery').value = '';
@@ -829,11 +1191,38 @@ document.getElementById('searchQuery').addEventListener('input', function() {
     generateSubset();
 });
 
-/* ── Boot: load registry then default dataset ── */
+/* ── Doppelganger: xref click handlers ── */
+document.getElementById('resultsVirtual').addEventListener('click', function(e) {
+    var indicator = e.target.closest('.xref-indicator');
+    if (!indicator) return;
+    var normPrompt = indicator.getAttribute('data-prompt');
+    var xrefEntry = XREF_INDEX[normPrompt];
+    if (!xrefEntry) return;
+
+    var panel = document.getElementById('xrefPanel');
+    var content = document.getElementById('xrefContent');
+    renderCrossDatasetMatch(content, xrefEntry, registry);
+    panel.style.display = '';
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+});
+
+document.getElementById('xrefClose').addEventListener('click', function() {
+    document.getElementById('xrefPanel').style.display = 'none';
+});
+
+/* ── Boot: load registry + xref, then default dataset ── */
 showLoading('Loading dataset registry...');
 
-loadRegistry().then(function(reg) {
+Promise.all([loadRegistry(), loadXref()]).then(function(results) {
+    var reg = results[0];
+    var xref = results[1];
     registry = reg;
+    buildXrefIndex(xref);
+
+    // Render registry-only visualizations (no dataset loading needed)
+    renderTaxonomyAlignment(document.getElementById('rosettaTable'), reg);
+    drawTaxonomyTimeline(document.getElementById('timelineCanvas'), reg);
+    drawExclusivityTrend(document.getElementById('exclusivityTrendCanvas'), reg);
 
     // Determine initial dataset from URL hash
     var hash = location.hash.replace('#', '');

@@ -1,7 +1,7 @@
 /**
- * vis.js — Pure-canvas Tufte-inspired visualizations for explore-wrongthink
+ * vis.js — Pure-canvas Tufte-inspired visualizations for where-the-lines-are
  *
- * Seven visualizations, zero external dependencies:
+ * Ten visualizations, zero external dependencies:
  *   1. drawCategoryStrip             — Small multiples for category counts (clickable)
  *   2. drawCooccurrenceMatrix        — Grayscale co-occurrence heatmap (clickable)
  *   3. renderWordFrequencyStrip      — Ranked dot plot of word frequencies
@@ -9,8 +9,11 @@
  *   5. renderWordCategoryBreakdown   — Category breakdown for a clicked word (proportion bars)
  *   6. drawExclusivityChart          — Exclusive vs shared stacked bars per category
  *   7. drawBinaryBitmap              — Dense binary data matrix (prompt × category)
+ *   8. renderTaxonomyAlignment       — Rosetta Stone: concept × dataset alignment table (DOM)
+ *   9. drawTaxonomyTimeline          — Drift: taxonomy expansion timeline (canvas)
+ *  10. drawExclusivityTrend          — Drift: exclusivity trend across datasets (canvas)
  *
- * All functions adapt to variable numbers of categories (8, 12, 14, 23).
+ * All functions adapt to variable numbers of categories (6–23).
  */
 
 /* ── 1. Category Strip (Small Multiples) ── */
@@ -598,4 +601,433 @@ function drawBinaryBitmap(container, data, keys, namesFn) {
     }
 
     container.appendChild(canvas);
+}
+
+/* ── 8. Split Verdict: Divergence Chart (Canvas) ── */
+
+function drawDivergenceChart(canvas, divergenceData, keys, config, namesFn) {
+    if (!divergenceData || !divergenceData.length) {
+        canvas.style.display = 'none';
+        return;
+    }
+    canvas.style.display = '';
+
+    var n = divergenceData.length;
+    var rowHeight = n > 16 ? 20 : 24;
+    var nameWidth = n > 10 ? 130 : 120;
+    var barAreaWidth = 200;
+    var labelWidth = 180;
+    var totalWidth = nameWidth + barAreaWidth + labelWidth;
+    var totalHeight = n * rowHeight + 4;
+
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = totalWidth * dpr;
+    canvas.height = totalHeight * dpr;
+    canvas.style.width = totalWidth + 'px';
+    canvas.style.height = totalHeight + 'px';
+
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, totalWidth, totalHeight);
+
+    var fontSize = n > 16 ? 9 : 10;
+
+    divergenceData.forEach(function(item, i) {
+        var y = i * rowHeight + rowHeight / 2 + 2;
+        var name = namesFn ? namesFn(item.key) : item.key;
+        var agreeRate = item.agree / (item.agree + item.disagree);
+        var disagreeRate = 1 - agreeRate;
+        var total = item.agree + item.disagree;
+
+        // Category label
+        ctx.fillStyle = '#333';
+        ctx.font = fontSize + 'px system-ui, -apple-system, sans-serif';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        var maxNameLen = n > 10 ? 18 : 16;
+        ctx.fillText(name.length > maxNameLen ? name.slice(0, maxNameLen - 1) + '\u2026' : name, nameWidth - 8, y);
+
+        if (total === 0) return;
+
+        // Agreement bar (dark)
+        var agreeW = agreeRate * (barAreaWidth - 10);
+        ctx.fillStyle = '#333';
+        ctx.fillRect(nameWidth, y - 5, agreeW, 10);
+
+        // Disagreement bar (light)
+        var disagreeW = disagreeRate * (barAreaWidth - 10);
+        ctx.fillStyle = '#ccc';
+        ctx.fillRect(nameWidth + agreeW, y - 5, disagreeW, 10);
+
+        // Label with kappa
+        ctx.fillStyle = '#666';
+        ctx.font = fontSize + 'px system-ui, -apple-system, sans-serif';
+        ctx.textAlign = 'left';
+        var agreePct = Math.round(agreeRate * 100);
+        var label = agreePct + '% agree';
+        if (item.kappa !== undefined && !isNaN(item.kappa)) {
+            label += ' (\u03BA=' + item.kappa.toFixed(2) + ')';
+        }
+        label += '  |  ' + Math.round(disagreeRate * 100) + '% diverge';
+        ctx.fillText(label, nameWidth + barAreaWidth, y);
+    });
+}
+
+/* ── 9. Rosetta Stone: Taxonomy Alignment Table (DOM) ── */
+
+function renderTaxonomyAlignment(container, registry) {
+    container.innerHTML = '';
+    if (!registry || !registry.datasets) return;
+
+    var datasets = registry.datasets;
+
+    // Build concept → {datasetId → [category names]}
+    var conceptMap = {};
+    datasets.forEach(function(ds) {
+        ds.categories.forEach(function(cat) {
+            var concepts = cat.concept;
+            if (!concepts) return;
+            if (!Array.isArray(concepts)) concepts = [concepts];
+            concepts.forEach(function(c) {
+                if (!conceptMap[c]) conceptMap[c] = {};
+                if (!conceptMap[c][ds.id]) conceptMap[c][ds.id] = [];
+                conceptMap[c][ds.id].push(cat.short || cat.name);
+            });
+        });
+    });
+
+    // Sort concepts by coverage (most datasets first), then alphabetically
+    var conceptList = Object.keys(conceptMap).sort(function(a, b) {
+        var coverA = Object.keys(conceptMap[a]).length;
+        var coverB = Object.keys(conceptMap[b]).length;
+        if (coverB !== coverA) return coverB - coverA;
+        return a.localeCompare(b);
+    });
+
+    // Build table
+    var table = document.createElement('table');
+    table.className = 'rosetta-table';
+
+    // Header row
+    var thead = document.createElement('thead');
+    var headerRow = document.createElement('tr');
+    var th0 = document.createElement('th');
+    th0.textContent = 'Concept';
+    headerRow.appendChild(th0);
+    datasets.forEach(function(ds) {
+        var th = document.createElement('th');
+        th.textContent = ds.name.replace('Jigsaw Toxic Comments', 'Jigsaw')
+            .replace('OpenAI Moderation', 'OpenAI')
+            .replace('PKU-SafeRLHF', 'SafeRLHF')
+            .replace('NVIDIA Aegis v2', 'Aegis');
+        th.className = 'rosetta-ds-header';
+        headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    // Body rows
+    var tbody = document.createElement('tbody');
+    conceptList.forEach(function(concept) {
+        var tr = document.createElement('tr');
+        var tdConcept = document.createElement('td');
+        tdConcept.textContent = concept;
+        tdConcept.className = 'rosetta-concept';
+        tr.appendChild(tdConcept);
+
+        datasets.forEach(function(ds) {
+            var td = document.createElement('td');
+            var names = conceptMap[concept][ds.id];
+            if (names && names.length > 0) {
+                td.textContent = names.join(', ');
+            } else {
+                td.className = 'rosetta-empty';
+                td.textContent = '\u2014';
+            }
+            tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    container.appendChild(table);
+}
+
+/* ── 9. Drift: Taxonomy Timeline (Canvas) ── */
+
+function drawTaxonomyTimeline(canvas, registry) {
+    if (!registry || !registry.datasets) return;
+
+    var datasets = registry.datasets;
+    var n = datasets.length;
+
+    // Track which concepts have appeared so far (for "new" highlighting)
+    var seenConcepts = {};
+
+    // Build per-dataset concept lists
+    var dsData = datasets.map(function(ds) {
+        var concepts = {};
+        ds.categories.forEach(function(cat) {
+            var cc = cat.concept;
+            if (!cc) return;
+            if (!Array.isArray(cc)) cc = [cc];
+            cc.forEach(function(c) {
+                if (!concepts[c]) concepts[c] = [];
+                concepts[c].push(cat.short || cat.name);
+            });
+        });
+        return {
+            id: ds.id,
+            name: ds.name.replace('Jigsaw Toxic Comments', 'Jigsaw')
+                .replace('OpenAI Moderation', 'OpenAI')
+                .replace('PKU-SafeRLHF', 'SafeRLHF')
+                .replace('NVIDIA Aegis v2', 'Aegis'),
+            source: ds.source,
+            catCount: ds.categories.length,
+            concepts: concepts
+        };
+    });
+
+    // Layout
+    var colWidth = 160;
+    var headerHeight = 50;
+    var lineHeight = 16;
+    var maxConcepts = Math.max.apply(null, dsData.map(function(d) { return Object.keys(d.concepts).length; }));
+    var totalWidth = n * colWidth + 20;
+    var totalHeight = headerHeight + (maxConcepts + 2) * lineHeight + 10;
+
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = totalWidth * dpr;
+    canvas.height = totalHeight * dpr;
+    canvas.style.width = totalWidth + 'px';
+    canvas.style.height = totalHeight + 'px';
+
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, totalWidth, totalHeight);
+
+    dsData.forEach(function(ds, col) {
+        var x = col * colWidth + 10;
+
+        // Dataset header
+        ctx.fillStyle = '#222';
+        ctx.font = 'bold 11px system-ui, -apple-system, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.fillText(ds.name, x, 4);
+
+        // Year and category count
+        ctx.fillStyle = '#888';
+        ctx.font = '10px system-ui, -apple-system, sans-serif';
+        var yearMatch = ds.source.match(/\((\d{4})\)/);
+        var year = yearMatch ? yearMatch[1] : '';
+        ctx.fillText(year + ' \u00B7 ' + ds.catCount + ' categories', x, 20);
+
+        // Connector line
+        ctx.strokeStyle = '#ddd';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x, 38);
+        ctx.lineTo(x, totalHeight - 5);
+        ctx.stroke();
+
+        // Concept list
+        var conceptKeys = Object.keys(ds.concepts).sort();
+        conceptKeys.forEach(function(concept, i) {
+            var y = headerHeight + i * lineHeight;
+            var isNew = !seenConcepts[concept];
+
+            ctx.fillStyle = isNew ? '#111' : '#bbb';
+            ctx.font = (isNew ? 'bold ' : '') + '10px system-ui, -apple-system, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+
+            var label = concept;
+            if (label.length > 18) label = label.slice(0, 17) + '\u2026';
+            ctx.fillText(label, x + 6, y);
+        });
+
+        // Mark all concepts as seen
+        conceptKeys.forEach(function(c) { seenConcepts[c] = true; });
+    });
+}
+
+/* ── 10. Drift: Exclusivity Trend (Canvas) ── */
+
+function drawExclusivityTrend(canvas, registry) {
+    if (!registry || !registry.datasets) return;
+
+    var datasets = registry.datasets.filter(function(ds) { return ds.stats; });
+    if (datasets.length === 0) return;
+
+    var n = datasets.length;
+    var rowHeight = 28;
+    var nameWidth = 120;
+    var barAreaWidth = 200;
+    var labelWidth = 260;
+    var totalWidth = nameWidth + barAreaWidth + labelWidth;
+    var totalHeight = n * rowHeight + 4;
+
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = totalWidth * dpr;
+    canvas.height = totalHeight * dpr;
+    canvas.style.width = totalWidth + 'px';
+    canvas.style.height = totalHeight + 'px';
+
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, totalWidth, totalHeight);
+
+    datasets.forEach(function(ds, i) {
+        var y = i * rowHeight + rowHeight / 2 + 2;
+        var stats = ds.stats;
+        var avgExcl = stats.avgExclusivity || 0;
+        var multiRate = stats.multiLabelRate || 0;
+
+        var name = ds.name.replace('Jigsaw Toxic Comments', 'Jigsaw')
+            .replace('OpenAI Moderation', 'OpenAI')
+            .replace('PKU-SafeRLHF', 'SafeRLHF')
+            .replace('NVIDIA Aegis v2', 'Aegis');
+
+        // Dataset name
+        ctx.fillStyle = '#333';
+        ctx.font = '11px system-ui, -apple-system, sans-serif';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(name, nameWidth - 8, y);
+
+        // Exclusivity bar (0–1 scale, dark)
+        var barW = avgExcl * (barAreaWidth - 10);
+        ctx.fillStyle = '#333';
+        ctx.fillRect(nameWidth, y - 5, barW, 10);
+
+        // Multi-label rate indicator (light bar from left)
+        var mlBarW = multiRate * (barAreaWidth - 10);
+        ctx.fillStyle = '#ddd';
+        ctx.fillRect(nameWidth, y + 6, mlBarW, 3);
+
+        // Label
+        ctx.fillStyle = '#666';
+        ctx.font = '10px system-ui, -apple-system, sans-serif';
+        ctx.textAlign = 'left';
+        var exclPct = Math.round(avgExcl * 100);
+        var mlPct = Math.round(multiRate * 100);
+        var rowsStr = stats.totalRows > 9999 ? (stats.totalRows / 1000).toFixed(1) + 'k' : stats.totalRows.toLocaleString();
+        ctx.fillText(exclPct + '% avg excl.  \u00B7  ' + mlPct + '% multi-label  \u00B7  ' + rowsStr + ' rows', nameWidth + barAreaWidth, y);
+    });
+}
+
+/* ── 12. Doppelganger: Cross-Dataset Match Panel (DOM) ── */
+
+function renderCrossDatasetMatch(container, xrefEntry, registry) {
+    container.innerHTML = '';
+    if (!xrefEntry || !xrefEntry.matches) return;
+
+    // Build dataset name lookup
+    var dsNames = {};
+    if (registry && registry.datasets) {
+        registry.datasets.forEach(function(ds) { dsNames[ds.id] = ds.name; });
+    }
+
+    // Build category name lookup per dataset
+    var catNames = {};
+    if (registry && registry.datasets) {
+        registry.datasets.forEach(function(ds) {
+            var map = {};
+            ds.categories.forEach(function(c) { map[c.key] = c.short || c.name; });
+            catNames[ds.id] = map;
+        });
+    }
+
+    // Prompt text (truncated)
+    var promptP = document.createElement('p');
+    promptP.style.cssText = 'font-size:0.9em;color:#333;margin-bottom:0.5rem;';
+    var promptText = xrefEntry.prompt;
+    if (promptText.length > 200) promptText = promptText.slice(0, 200) + '\u2026';
+    promptP.textContent = '\u201C' + promptText + '\u201D';
+    container.appendChild(promptP);
+
+    // Per-dataset rows
+    xrefEntry.matches.forEach(function(m) {
+        var row = document.createElement('div');
+        row.style.cssText = 'margin:0.25rem 0;font-size:0.85em;';
+
+        var dsSpan = document.createElement('span');
+        dsSpan.style.cssText = 'font-weight:600;color:#555;margin-right:0.5rem;font-family:system-ui,-apple-system,sans-serif;';
+        dsSpan.textContent = dsNames[m.dataset] || m.dataset;
+        row.appendChild(dsSpan);
+
+        var dsMap = catNames[m.dataset] || {};
+        m.cats.forEach(function(catKey) {
+            var pill = document.createElement('span');
+            pill.className = 'pill-sm';
+            pill.textContent = dsMap[catKey] || catKey;
+            row.appendChild(pill);
+        });
+
+        container.appendChild(row);
+    });
+}
+
+/* ── 13. Consensus: Agreement Summary (Canvas) ── */
+
+function drawAgreementSummary(canvas, data, namesFn) {
+    if (!data || !data.length) {
+        canvas.style.display = 'none';
+        return;
+    }
+    canvas.style.display = '';
+
+    var n = data.length;
+    var rowHeight = n > 16 ? 20 : 24;
+    var nameWidth = 140;
+    var barAreaWidth = 200;
+    var labelWidth = 140;
+    var totalWidth = nameWidth + barAreaWidth + labelWidth;
+    var totalHeight = n * rowHeight + 4;
+
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = totalWidth * dpr;
+    canvas.height = totalHeight * dpr;
+    canvas.style.width = totalWidth + 'px';
+    canvas.style.height = totalHeight + 'px';
+
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, totalWidth, totalHeight);
+
+    var fontSize = n > 16 ? 9 : 10;
+
+    data.forEach(function(item, i) {
+        var y = i * rowHeight + rowHeight / 2 + 2;
+        var name = namesFn ? namesFn(item.key) : item.key;
+
+        // Name label
+        ctx.fillStyle = '#333';
+        ctx.font = fontSize + 'px system-ui, -apple-system, sans-serif';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        var maxNameLen = 18;
+        ctx.fillText(name.length > maxNameLen ? name.slice(0, maxNameLen - 1) + '\u2026' : name, nameWidth - 8, y);
+
+        var total = item.agree + item.disagree;
+        if (total === 0) return;
+
+        var agreeRate = item.agree / total;
+
+        // Agreement bar (dark)
+        var agreeW = agreeRate * (barAreaWidth - 10);
+        ctx.fillStyle = '#333';
+        ctx.fillRect(nameWidth, y - 5, agreeW, 10);
+
+        // Disagreement bar (light)
+        var disagreeW = (1 - agreeRate) * (barAreaWidth - 10);
+        ctx.fillStyle = '#ccc';
+        ctx.fillRect(nameWidth + agreeW, y - 5, disagreeW, 10);
+
+        // Label
+        ctx.fillStyle = '#666';
+        ctx.font = fontSize + 'px system-ui, -apple-system, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(Math.round(agreeRate * 100) + '% agree  (' + total + ' shared)', nameWidth + barAreaWidth, y);
+    });
 }
