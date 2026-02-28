@@ -159,6 +159,12 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
+# Node
+node_modules/
+
+# Playwright
+test-results/
+
 # Local planning/agent artifacts (never commit)
 CLAUDE.md
 tasks/

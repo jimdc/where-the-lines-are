@@ -149,6 +149,7 @@
 </div>
 <script src="static/vis.js"></script>
 <script src="dataset-loader.js"></script>
+<script src="static/logic.js"></script>
 <script>
 /* ── Mutable schema variables (populated from registry) ── */
 var activeSchema = null;
@@ -163,27 +164,7 @@ var checkboxDefinitionMapping = {};
 var pendingUrlState = null;
 var hashUpdateTimer = null;
 
-function parseHash() {
-    var h = location.hash.replace('#', '');
-    if (!h) return { dataset: null };
-    // Backward compat: bare dataset id like #openai
-    if (h.indexOf('=') === -1) return { dataset: h };
-
-    var params = {};
-    h.split('&').forEach(function(part) {
-        var eq = part.indexOf('=');
-        if (eq > 0) {
-            params[part.slice(0, eq)] = decodeURIComponent(part.slice(eq + 1));
-        }
-    });
-    return {
-        dataset: params.dataset || null,
-        include: params.include ? params.include.split(',') : [],
-        exclude: params.exclude ? params.exclude.split(',') : [],
-        search: params.search || '',
-        order: params.order || ''
-    };
-}
+/* parseHash is now in static/logic.js */
 
 function updateHash() {
     if (hashUpdateTimer) clearTimeout(hashUpdateTimer);
@@ -236,7 +217,7 @@ var categoryOrder = 'schema'; // 'schema' or 'frequency'
 
 function reorderKeys() {
     if (categoryOrder === 'frequency' && window.dataset) {
-        var counts = countSingleCategories(window.dataset);
+        var counts = countSingleCategories(window.dataset, KEYS);
         KEYS = CATEGORY_KEYS.slice().sort(function(a, b) {
             return (counts[b] || 0) - (counts[a] || 0);
         });
@@ -273,9 +254,7 @@ function buildXrefIndex(xrefArray, fuzzyArray) {
     });
 }
 
-function normalizePrompt(text) {
-    return (text || '').toLowerCase().replace(/\s+/g, ' ').trim();
-}
+/* normalizePrompt is now in static/logic.js */
 
 function setActiveSchema(entry) {
     activeSchema = entry;
@@ -465,182 +444,13 @@ function getRowValue(row, key) {
     return row[key] !== undefined ? String(row[key]) : 'N/A';
 }
 
-function escapeHtml(str) {
-    return str.replace(/[&<>"']/g, function(c) {
-        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c];
-    });
-}
+/* escapeHtml is now in static/logic.js */
 
-function highlightPrompt(text, search, searchTerms) {
-    if (!search && (!searchTerms || !searchTerms.length)) return escapeHtml(text);
-    var terms = searchTerms && searchTerms.length ? searchTerms : [search];
-    // Build single regex from all terms
-    var escaped = terms.filter(Boolean).map(function(t) {
-        return t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    });
-    if (!escaped.length) return escapeHtml(text);
-    var regex = new RegExp('(' + escaped.join('|') + ')', 'gi');
-    var last = 0, out = '', match;
-    while ((match = regex.exec(text)) !== null) {
-        out += escapeHtml(text.slice(last, match.index));
-        out += '<mark>' + escapeHtml(match[0]) + '</mark>';
-        last = match.index + match[0].length;
-    }
-    out += escapeHtml(text.slice(last));
-    return out;
-}
+/* highlightPrompt is now in static/logic.js */
 
-/* ── Boolean Search Parser ── */
-function tokenizeQuery(input) {
-    var tokens = [];
-    var i = 0;
-    while (i < input.length) {
-        // Skip whitespace
-        if (input[i] === ' ' || input[i] === '\t') { i++; continue; }
-        // Quoted phrase
-        if (input[i] === '"') {
-            var end = input.indexOf('"', i + 1);
-            if (end === -1) end = input.length;
-            tokens.push({ type: 'TERM', value: input.slice(i + 1, end).toLowerCase() });
-            i = end + 1;
-            continue;
-        }
-        // Read word
-        var start = i;
-        while (i < input.length && input[i] !== ' ' && input[i] !== '\t' && input[i] !== '"') i++;
-        var word = input.slice(start, i);
-        var upper = word.toUpperCase();
-        if (upper === 'AND') tokens.push({ type: 'AND' });
-        else if (upper === 'OR') tokens.push({ type: 'OR' });
-        else if (upper === 'NOT') tokens.push({ type: 'NOT' });
-        else tokens.push({ type: 'TERM', value: word.toLowerCase() });
-    }
-    return tokens;
-}
+/* Boolean search (tokenizeQuery, parseQuery, evalQuery, extractTerms, buildSearchFn) is now in static/logic.js */
 
-function parseQuery(tokens) {
-    var pos = 0;
-    function parseOr() {
-        var left = parseAnd();
-        while (pos < tokens.length && tokens[pos].type === 'OR') {
-            pos++;
-            var right = parseAnd();
-            left = { type: 'OR', left: left, right: right };
-        }
-        return left;
-    }
-    function parseAnd() {
-        var left = parseNot();
-        while (pos < tokens.length && (tokens[pos].type === 'AND' || tokens[pos].type === 'TERM' || tokens[pos].type === 'NOT')) {
-            if (tokens[pos].type === 'AND') pos++;
-            var right = parseNot();
-            left = { type: 'AND', left: left, right: right };
-        }
-        return left;
-    }
-    function parseNot() {
-        if (pos < tokens.length && tokens[pos].type === 'NOT') {
-            pos++;
-            var operand = parseNot();
-            return { type: 'NOT', operand: operand };
-        }
-        return parsePrimary();
-    }
-    function parsePrimary() {
-        if (pos < tokens.length && tokens[pos].type === 'TERM') {
-            var node = { type: 'TERM', value: tokens[pos].value };
-            pos++;
-            return node;
-        }
-        // Fallback: treat as empty match-all
-        return { type: 'TERM', value: '' };
-    }
-    if (tokens.length === 0) return null;
-    var ast = parseOr();
-    return ast;
-}
-
-function evalQuery(ast, text) {
-    if (!ast) return true;
-    switch (ast.type) {
-        case 'TERM': return ast.value === '' || text.indexOf(ast.value) !== -1;
-        case 'AND': return evalQuery(ast.left, text) && evalQuery(ast.right, text);
-        case 'OR': return evalQuery(ast.left, text) || evalQuery(ast.right, text);
-        case 'NOT': return !evalQuery(ast.operand, text);
-    }
-    return true;
-}
-
-function extractTerms(ast) {
-    if (!ast) return [];
-    switch (ast.type) {
-        case 'TERM': return ast.value ? [ast.value] : [];
-        case 'AND': return extractTerms(ast.left).concat(extractTerms(ast.right));
-        case 'OR': return extractTerms(ast.left).concat(extractTerms(ast.right));
-        case 'NOT': return []; // Skip NOT branches for highlighting
-    }
-    return [];
-}
-
-function buildSearchFn(rawQuery) {
-    var query = rawQuery.trim();
-    if (!query) return null;
-    // Fast path: single word without operators
-    if (!/\b(AND|OR|NOT)\b/.test(query) && query.indexOf('"') === -1 && query.indexOf(' ') === -1) {
-        var lower = query.toLowerCase();
-        return {
-            test: function(text) { return text.toLowerCase().indexOf(lower) !== -1; },
-            terms: [lower],
-            description: lower
-        };
-    }
-    var tokens = tokenizeQuery(query);
-    var ast = parseQuery(tokens);
-    if (!ast) return null;
-    var terms = extractTerms(ast);
-    // Build description from tokens
-    var desc = tokens.map(function(t) {
-        if (t.type === 'TERM') return '"' + t.value + '"';
-        return t.type;
-    }).join(' ');
-    return {
-        test: function(text) { return evalQuery(ast, text.toLowerCase()); },
-        terms: terms,
-        description: desc
-    };
-}
-
-/* ── Counting functions ── */
-function countSingleCategories(data) {
-    var counts = {};
-    KEYS.forEach(function(k) { counts[k] = 0; });
-    data.forEach(function(row) {
-        KEYS.forEach(function(k) {
-            if (row[k] === 1) counts[k]++;
-        });
-    });
-    return counts;
-}
-
-function countPairwise(data) {
-    var counts = {};
-    for (var i = 0; i < KEYS.length; i++) {
-        for (var j = i + 1; j < KEYS.length; j++) {
-            counts[KEYS[i] + '+' + KEYS[j]] = 0;
-        }
-    }
-    data.forEach(function(row) {
-        for (var i = 0; i < KEYS.length; i++) {
-            for (var j = i + 1; j < KEYS.length; j++) {
-                if (row[KEYS[i]] === 1 && row[KEYS[j]] === 1) {
-                    var pair = KEYS[i] + '+' + KEYS[j];
-                    counts[pair] = (counts[pair] || 0) + 1;
-                }
-            }
-        }
-    });
-    return counts;
-}
+/* Counting functions (countSingleCategories, countPairwise) are now in static/logic.js */
 
 function buildSuggestions(pairCounts) {
     var result = {};
@@ -656,46 +466,7 @@ function buildSuggestions(pairCounts) {
     return result;
 }
 
-function countCombinations(data) {
-    var counts = {};
-    data.forEach(function(row) {
-        var keys1 = KEYS.filter(function(k) { return row[k] === 1; }).sort();
-        var combo = keys1.join('+') || 'none';
-        counts[combo] = (counts[combo] || 0) + 1;
-    });
-    return counts;
-}
-
-/* ── Exclusivity counting ── */
-function countExclusivity(data) {
-    var exclusive = {};
-    var shared = {};
-    KEYS.forEach(function(k) { exclusive[k] = 0; shared[k] = 0; });
-
-    data.forEach(function(row) {
-        var flagged = KEYS.filter(function(k) { return row[k] === 1; });
-        if (flagged.length === 1) {
-            exclusive[flagged[0]]++;
-        } else if (flagged.length > 1) {
-            flagged.forEach(function(k) { shared[k]++; });
-        }
-    });
-
-    return { exclusive: exclusive, shared: shared };
-}
-
-/* ── Divergence computation (Split Verdict) ── */
-function computeCohensKappa(a11, a10, a01, a00) {
-    // a11=both agree yes, a10=r0 yes r1 no, a01=r0 no r1 yes, a00=both agree no
-    var total = a11 + a10 + a01 + a00;
-    if (total === 0) return 0;
-    var po = (a11 + a00) / total; // observed agreement
-    var pe1 = ((a11 + a10) / total) * ((a11 + a01) / total);
-    var pe0 = ((a00 + a01) / total) * ((a00 + a10) / total);
-    var pe = pe1 + pe0; // expected agreement
-    if (pe >= 1) return 1;
-    return (po - pe) / (1 - pe);
-}
+/* countCombinations, countExclusivity, computeCohensKappa are now in static/logic.js */
 
 function computeResponseDivergence(data, keys, prefixes) {
     // For SafeRLHF: compare _r0_XX vs _r1_XX per category
@@ -1088,17 +859,7 @@ function renderConceptComparison(concept, reg) {
     }
 }
 
-/* ── Surprise metric helpers ── */
-function getComboKey(row) {
-    var flagged = KEYS.filter(function(k) { return row[k] === 1; }).sort();
-    return flagged.join('+') || 'none';
-}
-
-function computeSurpriseScore(row) {
-    var combo = getComboKey(row);
-    var freq = (window.COMBO_FREQS && window.COMBO_FREQS[combo]) || 1;
-    return 1 / freq;
-}
+/* getComboKey, computeSurpriseScore are now in static/logic.js */
 
 /* ── Suggestion display ── */
 function updateSuggestionDisplay(values) {
@@ -1200,7 +961,7 @@ function applySortToSubset() {
             var tb = (b[textField] || b.prompt || '').toLowerCase();
             cmp = ta < tb ? -1 : ta > tb ? 1 : 0;
         } else if (col === 'surprise') {
-            cmp = computeSurpriseScore(a) - computeSurpriseScore(b);
+            cmp = computeSurpriseScore(a, KEYS, window.COMBO_FREQS) - computeSurpriseScore(b, KEYS, window.COMBO_FREQS);
         } else if (col === 'catcount') {
             var ca = KEYS.filter(function(k) { return a[k] === 1; }).length;
             var cb = KEYS.filter(function(k) { return b[k] === 1; }).length;
@@ -1260,8 +1021,8 @@ function buildResultRow(row, rawQuery, maxSurprise) {
     var tdS = document.createElement('td');
     tdS.className = 'surprise-cell';
     if (window.COMBO_FREQS) {
-        var score = computeSurpriseScore(row);
-        var combo = getComboKey(row);
+        var score = computeSurpriseScore(row, KEYS, window.COMBO_FREQS);
+        var combo = getComboKey(row, KEYS);
         var freq = window.COMBO_FREQS[combo] || 1;
         var barW = Math.round((score / maxSurprise) * 40);
 
@@ -1380,10 +1141,10 @@ var lastWordCounts = {};
 
 function updateVisualizations(subset) {
     lastSubset = subset;
-    var singleCounts = countSingleCategories(subset);
-    var pairCounts = countPairwise(subset);
-    var comboCounts = countCombinations(subset);
-    var exclusivity = countExclusivity(subset);
+    var singleCounts = countSingleCategories(subset, KEYS);
+    var pairCounts = countPairwise(subset, KEYS);
+    var comboCounts = countCombinations(subset, KEYS);
+    var exclusivity = countExclusivity(subset, KEYS);
 
     // Small multiples strip (full names, clickable)
     drawCategoryStrip(
@@ -1512,7 +1273,7 @@ function generateSubset(event) {
     var maxSurprise = 0;
     if (window.COMBO_FREQS) {
         subset.forEach(function(row) {
-            var s = computeSurpriseScore(row);
+            var s = computeSurpriseScore(row, KEYS, window.COMBO_FREQS);
             if (s > maxSurprise) maxSurprise = s;
         });
     }
@@ -1554,8 +1315,8 @@ function switchDataset(id) {
         // Reset stop words before rebuilding
         stopWords = new Set(defaultStopWords);
         buildDynamicStopWords(data);
-        window.SUGGESTIONS = buildSuggestions(countPairwise(data));
-        window.COMBO_FREQS = countCombinations(data);
+        window.SUGGESTIONS = buildSuggestions(countPairwise(data, KEYS));
+        window.COMBO_FREQS = countCombinations(data, KEYS);
 
         // Dataset summary paragraph
         updateSummaryParagraph(entry, data);
@@ -1591,7 +1352,7 @@ function switchDataset(id) {
 
 function updateSummaryParagraph(entry, data) {
     var total = data.length;
-    var singleCounts = countSingleCategories(data);
+    var singleCounts = countSingleCategories(data, KEYS);
     var sorted = Object.entries(singleCounts).sort(function(a, b) { return b[1] - a[1]; });
     var topCat = sorted[0];
     var botCat = sorted[sorted.length - 1];
@@ -1616,13 +1377,7 @@ document.getElementById('searchQuery').addEventListener('input', function() {
 });
 
 /* ── CSV Export ── */
-function csvEscape(val) {
-    var s = String(val == null ? '' : val);
-    if (s.indexOf(',') !== -1 || s.indexOf('"') !== -1 || s.indexOf('\n') !== -1) {
-        return '"' + s.replace(/"/g, '""') + '"';
-    }
-    return s;
-}
+/* csvEscape is now in static/logic.js */
 
 function exportFilteredCsv() {
     if (!currentSubset.length || !activeSchema) return;
@@ -1633,7 +1388,7 @@ function exportFilteredCsv() {
     currentSubset.forEach(function(row) {
         var vals = [csvEscape(row[textField] || row.prompt || '')];
         KEYS.forEach(function(k) { vals.push(row[k] || 0); });
-        vals.push(computeSurpriseScore(row).toFixed(4));
+        vals.push(computeSurpriseScore(row, KEYS, window.COMBO_FREQS).toFixed(4));
         lines.push(vals.join(','));
     });
 
@@ -1749,7 +1504,7 @@ Promise.all([loadRegistry(), loadXref(), loadFuzzyXref()]).then(function(results
     buildConceptSelector(reg);
 
     // Determine initial dataset from URL hash
-    var hashState = parseHash();
+    var hashState = parseHash(location.hash);
     var defaultId = 'openai';
     if (hashState.dataset && reg.datasets.some(function(d) { return d.id === hashState.dataset; })) {
         defaultId = hashState.dataset;
