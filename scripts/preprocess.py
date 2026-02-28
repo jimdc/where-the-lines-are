@@ -14,6 +14,7 @@ Usage:
     python scripts/preprocess.py registry      # generate registry.json + .js
     python scripts/preprocess.py stats         # compute per-dataset stats into registry
     python scripts/preprocess.py xref          # build cross-dataset prompt index
+    python scripts/preprocess.py fuzzy         # build fuzzy cross-dataset matching
     python scripts/preprocess.py all           # run all of the above
 """
 
@@ -633,6 +634,239 @@ def build_xref():
     print(f'  Done: xref ({len(xref)} cross-dataset matches)')
 
 
+def build_fuzzy_xref():
+    """Build fuzzy cross-dataset prompt matching using MinHash LSH.
+
+    Finds similar (but not identical) prompts across datasets using
+    Jaccard similarity of word shingles. Uses datasketch's MinHash LSH
+    if available, falls back to inverted-index blocking.
+
+    Output: xref-fuzzy.json / xref-fuzzy.js with entries:
+    {prompts: [text1, text2, ...], similarity: float, matches: [{dataset, cats}]}
+    """
+    import re
+
+    print('Building fuzzy cross-dataset matching (xref-fuzzy)...')
+
+    reg_path = os.path.join(DATASETS_DIR, 'registry.json')
+    with open(reg_path) as f:
+        registry = json.load(f)
+
+    # Common English stop words
+    STOP_WORDS = set([
+        'the', 'and', 'to', 'a', 'of', 'it', 'in', 'i', 'that', 'is', 'on', 'for',
+        'with', 'as', 'are', 'was', 'this', 'but', 'be', 'have', 'has', 'had', 'or',
+        'an', 'my', 'if', 'me', 'so', 'you', 'we', 'they', 'he', 'she', 'them',
+        'his', 'her', 'your', 'their', 'our', 'us', 'do', 'does', 'did', 'at', 'by',
+        'from', 'what', 'who', 'which', 'where', 'when', 'why', 'how', 'can', 'could',
+        'should', 'would', 'will', 'just', 'not', 'very', 'into', 'also', 'about',
+        'up', 'down', 'out', 'no', 'yes', 'more', 'some', 'than'
+    ])
+
+    def tokenize(text):
+        """Tokenize: lowercase, remove punctuation, remove stop words, min 2 chars."""
+        words = re.sub(r'[^a-z0-9\s]', '', text.lower()).split()
+        return [w for w in words if w not in STOP_WORDS and len(w) >= 2]
+
+    # Load exact xref to exclude from fuzzy matches
+    xref_path = os.path.join(DATASETS_DIR, 'xref.json')
+    exact_norms = set()
+    if os.path.exists(xref_path):
+        with open(xref_path) as f:
+            xref_data = json.load(f)
+        for entry in xref_data:
+            exact_norms.add(entry['prompt'])
+
+    # Load all prompts from all datasets
+    all_prompts = []  # [(dataset_id, text, tokens, cats)]
+    for ds_entry in registry['datasets']:
+        ds_id = ds_entry['id']
+        json_path = os.path.join(DATASETS_DIR, f'{ds_id}.json')
+        if not os.path.exists(json_path):
+            print(f'  Skipping {ds_id} — not found')
+            continue
+
+        text_field = ds_entry.get('textField', 'prompt')
+        keys = [c['key'] for c in ds_entry['categories']]
+
+        print(f'  Loading {ds_id}...')
+        with open(json_path) as f:
+            data = json.load(f)
+
+        for row in data:
+            text = row.get(text_field, '')
+            if not text or len(text.strip()) < 10:
+                continue
+            norm = re.sub(r'\s+', ' ', text.strip().lower())
+            if norm in exact_norms:
+                continue  # skip exact matches (already in xref)
+            tokens = tokenize(text)
+            if len(tokens) < 2:
+                continue
+            flagged = [k for k in keys if row.get(k, 0) == 1]
+            if not flagged:
+                continue
+            all_prompts.append({
+                'dataset': ds_id,
+                'text': text.strip()[:200],
+                'tokens': set(tokens),
+                'cats': flagged
+            })
+
+    print(f'  Total prompts for fuzzy matching: {len(all_prompts)}')
+
+    # Group by dataset for cross-dataset comparison
+    by_dataset = {}
+    for i, p in enumerate(all_prompts):
+        ds = p['dataset']
+        if ds not in by_dataset:
+            by_dataset[ds] = []
+        by_dataset[ds].append(i)
+
+    ds_ids = sorted(by_dataset.keys())
+    print(f'  Datasets: {ds_ids}')
+
+    # Try datasketch LSH
+    try:
+        from datasketch import MinHash, MinHashLSH
+        print('  Using datasketch MinHash LSH (128 permutations, threshold 0.7)...')
+
+        NUM_PERM = 128
+        THRESHOLD = 0.7
+
+        # Build MinHash for each prompt
+        minhashes = []
+        for i, p in enumerate(all_prompts):
+            m = MinHash(num_perm=NUM_PERM)
+            for token in p['tokens']:
+                m.update(token.encode('utf8'))
+            minhashes.append(m)
+            if (i + 1) % 50000 == 0:
+                print(f'    MinHash: {i + 1}/{len(all_prompts)}')
+
+        # Build LSH index per dataset, query across datasets
+        matches = []
+        for di in range(len(ds_ids)):
+            ds_a = ds_ids[di]
+            # Build LSH from dataset A
+            lsh = MinHashLSH(threshold=THRESHOLD, num_perm=NUM_PERM)
+            for idx in by_dataset[ds_a]:
+                lsh.insert(str(idx), minhashes[idx])
+
+            # Query from all other datasets
+            for dj in range(di + 1, len(ds_ids)):
+                ds_b = ds_ids[dj]
+                pair_matches = 0
+                for idx_b in by_dataset[ds_b]:
+                    result = lsh.query(minhashes[idx_b])
+                    for r in result:
+                        idx_a = int(r)
+                        # Compute exact Jaccard
+                        tokens_a = all_prompts[idx_a]['tokens']
+                        tokens_b = all_prompts[idx_b]['tokens']
+                        intersection = len(tokens_a & tokens_b)
+                        union = len(tokens_a | tokens_b)
+                        sim = intersection / union if union > 0 else 0
+                        if sim >= THRESHOLD:
+                            matches.append({
+                                'prompts': [all_prompts[idx_a]['text'], all_prompts[idx_b]['text']],
+                                'similarity': round(sim, 2),
+                                'matches': [
+                                    {'dataset': all_prompts[idx_a]['dataset'], 'cats': all_prompts[idx_a]['cats']},
+                                    {'dataset': all_prompts[idx_b]['dataset'], 'cats': all_prompts[idx_b]['cats']}
+                                ]
+                            })
+                            pair_matches += 1
+                            if len(matches) >= 10000:
+                                break
+                    if len(matches) >= 10000:
+                        break
+                print(f'    {ds_a} × {ds_b}: {pair_matches} fuzzy matches')
+                if len(matches) >= 10000:
+                    break
+            if len(matches) >= 10000:
+                print('  Reached 10K match cap.')
+                break
+
+    except ImportError:
+        print('  datasketch not installed. Using inverted-index blocking fallback...')
+        THRESHOLD = 0.7
+
+        # Build inverted index: token -> set of prompt indices
+        inv_index = {}
+        for i, p in enumerate(all_prompts):
+            for token in p['tokens']:
+                if token not in inv_index:
+                    inv_index[token] = set()
+                inv_index[token].add(i)
+
+        # For each prompt, find candidates from other datasets that share tokens
+        matches = []
+        seen_pairs = set()
+
+        for i, p in enumerate(all_prompts):
+            if len(matches) >= 10000:
+                break
+            candidates = set()
+            for token in p['tokens']:
+                if len(inv_index.get(token, set())) < 5000:  # skip very common tokens
+                    candidates.update(inv_index.get(token, set()))
+
+            for j in candidates:
+                if j <= i:
+                    continue
+                if all_prompts[j]['dataset'] == p['dataset']:
+                    continue
+                pair_key = (min(i, j), max(i, j))
+                if pair_key in seen_pairs:
+                    continue
+
+                tokens_a = p['tokens']
+                tokens_b = all_prompts[j]['tokens']
+                intersection = len(tokens_a & tokens_b)
+                union = len(tokens_a | tokens_b)
+                sim = intersection / union if union > 0 else 0
+
+                if sim >= THRESHOLD:
+                    seen_pairs.add(pair_key)
+                    matches.append({
+                        'prompts': [p['text'], all_prompts[j]['text']],
+                        'similarity': round(sim, 2),
+                        'matches': [
+                            {'dataset': p['dataset'], 'cats': p['cats']},
+                            {'dataset': all_prompts[j]['dataset'], 'cats': all_prompts[j]['cats']}
+                        ]
+                    })
+
+            if (i + 1) % 10000 == 0:
+                print(f'    Processed {i + 1}/{len(all_prompts)}, {len(matches)} matches so far')
+
+    # Sort by similarity descending
+    matches.sort(key=lambda x: -x['similarity'])
+    matches = matches[:10000]
+
+    print(f'  Total fuzzy matches: {len(matches)}')
+
+    # Write output
+    json_path = os.path.join(DATASETS_DIR, 'xref-fuzzy.json')
+    js_path = os.path.join(DATASETS_DIR, 'xref-fuzzy.js')
+
+    print(f'  Writing {json_path}...')
+    with open(json_path, 'w') as f:
+        json.dump(matches, f, separators=(',', ':'))
+
+    size_mb = os.path.getsize(json_path) / (1024 * 1024)
+    print(f'  JSON size: {size_mb:.1f} MB')
+
+    print(f'  Writing {js_path}...')
+    with open(js_path, 'w') as f:
+        f.write('var dataset_xref_fuzzy = ')
+        json.dump(matches, f, separators=(',', ':'))
+        f.write(';\n')
+
+    print(f'  Done: xref-fuzzy ({len(matches)} fuzzy matches)')
+
+
 def generate_registry():
     """Generate registry.json and registry.js with full schema metadata."""
     print('Generating registry...')
@@ -915,6 +1149,8 @@ def main():
         compute_stats()
     elif cmd == 'xref':
         build_xref()
+    elif cmd == 'fuzzy':
+        build_fuzzy_xref()
     elif cmd == 'all':
         generate_registry()
         process_openai()
