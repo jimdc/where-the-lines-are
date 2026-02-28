@@ -30,6 +30,14 @@
   <canvas id="exclusivityTrendCanvas"></canvas>
 </div>
 
+<div id="conceptComparisonSection">
+  <h2>Concept comparison</h2>
+  <p class="hint">How the same concept manifests across datasets. Dark bar = % flagged. Light bar = exclusivity ratio.</p>
+  <select id="conceptSelector" style="font-family:system-ui,-apple-system,sans-serif;font-size:0.9em;margin-bottom:0.5rem;padding:0.2rem 0.4rem;border:1px solid #ccc;border-radius:2px;"></select>
+  <canvas id="conceptComparisonCanvas"></canvas>
+  <p id="conceptDetail" class="muted" style="font-size:0.82em;margin-top:0.25rem;"></p>
+</div>
+
 <p class="danger">Contains potentially disturbing text.</p>
 <p id="datasetSummary" class="muted"></p>
 
@@ -73,7 +81,13 @@
   <canvas id="cooccurrenceCanvas"></canvas>
 </div>
 
-<h2>Active filters</h2>
+<h3>Network view</h3>
+<p class="hint">Force-directed layout. Node size = frequency. Edge darkness = co-occurrence strength. Only above-median edges shown.</p>
+<div id="networkSection">
+  <canvas id="networkCanvas"></canvas>
+</div>
+
+<h2>Active filters <span id="orderToggle" class="order-toggle">order: schema</span></h2>
 <div id="categoryPills"></div>
 <div id="filterControlsRow">
   <div class="wordsearch-box">
@@ -81,6 +95,7 @@
     <input type="text" id="searchQuery" placeholder="Search by keyword...">
   </div>
 </div>
+<div id="searchParsed" class="muted" style="font-family:system-ui,-apple-system,sans-serif;font-size:0.78em;margin-top:0.25rem;"></div>
 <div id="filterSummary"></div>
 
 <div id="wordRow">
@@ -102,15 +117,15 @@
 </div>
 
 <div id="matchingLinesSection">
-  <h2 id="match-count">0 Matching prompts</h2>
+  <h2 id="match-count">0 Matching prompts <button id="exportCsvBtn" class="btn" style="font-size:0.7em;margin-left:0.5rem;vertical-align:middle;">Export CSV</button></h2>
   <p class="hint">Sorted by surprise when unfiltered. Unique combinations appear first.</p>
   <div id="resultsVirtual">
     <table id="results">
       <thead>
         <tr>
-          <th>Prompt</th>
-          <th class="surprise-col-header">Surprise</th>
-          <th class="cat-col-header">Categories</th>
+          <th class="sortable-header" data-sort="prompt">Prompt <span class="sort-indicator"></span></th>
+          <th class="surprise-col-header sortable-header" data-sort="surprise">Surprise <span class="sort-indicator"></span></th>
+          <th class="cat-col-header sortable-header" data-sort="catcount">Categories <span class="sort-indicator"></span></th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -144,15 +159,117 @@ var CATEGORY_NAMES = {};
 var CATEGORY_SHORT = {};
 var checkboxDefinitionMapping = {};
 
+/* ── URL State ── */
+var pendingUrlState = null;
+var hashUpdateTimer = null;
+
+function parseHash() {
+    var h = location.hash.replace('#', '');
+    if (!h) return { dataset: null };
+    // Backward compat: bare dataset id like #openai
+    if (h.indexOf('=') === -1) return { dataset: h };
+
+    var params = {};
+    h.split('&').forEach(function(part) {
+        var eq = part.indexOf('=');
+        if (eq > 0) {
+            params[part.slice(0, eq)] = decodeURIComponent(part.slice(eq + 1));
+        }
+    });
+    return {
+        dataset: params.dataset || null,
+        include: params.include ? params.include.split(',') : [],
+        exclude: params.exclude ? params.exclude.split(',') : [],
+        search: params.search || '',
+        order: params.order || ''
+    };
+}
+
+function updateHash() {
+    if (hashUpdateTimer) clearTimeout(hashUpdateTimer);
+    hashUpdateTimer = setTimeout(function() {
+        if (!activeSchema) return;
+        var parts = ['dataset=' + activeSchema.id];
+
+        var included = KEYS.filter(function(k) { return pillStates[k] === 'Include'; });
+        var excluded = KEYS.filter(function(k) { return pillStates[k] === 'Exclude'; });
+        if (included.length) parts.push('include=' + included.join(','));
+        if (excluded.length) parts.push('exclude=' + excluded.join(','));
+
+        var search = document.getElementById('searchQuery').value.trim();
+        if (search) parts.push('search=' + encodeURIComponent(search));
+
+        if (categoryOrder !== 'schema') parts.push('order=' + categoryOrder);
+
+        history.replaceState(null, '', '#' + parts.join('&'));
+    }, 300);
+}
+
+function applyUrlState(state) {
+    if (!state) return;
+    if (state.include) {
+        state.include.forEach(function(k) {
+            if (pillStates.hasOwnProperty(k)) setPillState(k, 'Include');
+        });
+    }
+    if (state.exclude) {
+        state.exclude.forEach(function(k) {
+            if (pillStates.hasOwnProperty(k)) setPillState(k, 'Exclude');
+        });
+    }
+    if (state.search) {
+        document.getElementById('searchQuery').value = state.search;
+    }
+    if (state.order && state.order === 'frequency') {
+        categoryOrder = 'frequency';
+        document.getElementById('orderToggle').textContent = 'order: frequency';
+        reorderKeys();
+        buildCategoryPills(true);
+        // Re-apply pill states after rebuild
+        if (state.include) state.include.forEach(function(k) { if (pillStates.hasOwnProperty(k)) setPillState(k, 'Include'); });
+        if (state.exclude) state.exclude.forEach(function(k) { if (pillStates.hasOwnProperty(k)) setPillState(k, 'Exclude'); });
+    }
+}
+
+/* ── Category ordering ── */
+var categoryOrder = 'schema'; // 'schema' or 'frequency'
+
+function reorderKeys() {
+    if (categoryOrder === 'frequency' && window.dataset) {
+        var counts = countSingleCategories(window.dataset);
+        KEYS = CATEGORY_KEYS.slice().sort(function(a, b) {
+            return (counts[b] || 0) - (counts[a] || 0);
+        });
+    } else {
+        KEYS = CATEGORY_KEYS.slice();
+    }
+    ALL_FILTER_KEYS = KEYS.concat(['None']);
+}
+
 /* ── Cross-dataset (xref) globals ── */
 var XREF_DATA = [];
 var XREF_INDEX = {}; // normalized prompt → xref entry
+var XREF_FUZZY = [];
+var XREF_FUZZY_INDEX = {}; // normalized prompt → fuzzy xref entry
 
-function buildXrefIndex(xrefArray) {
+function buildXrefIndex(xrefArray, fuzzyArray) {
     XREF_DATA = xrefArray || [];
     XREF_INDEX = {};
     XREF_DATA.forEach(function(entry) {
         XREF_INDEX[entry.prompt] = entry;
+    });
+
+    XREF_FUZZY = fuzzyArray || [];
+    XREF_FUZZY_INDEX = {};
+    XREF_FUZZY.forEach(function(entry) {
+        if (entry.prompts && entry.prompts.length) {
+            entry.prompts.forEach(function(p) {
+                var norm = (p || '').toLowerCase().replace(/\s+/g, ' ').trim();
+                if (norm && !XREF_FUZZY_INDEX[norm]) {
+                    XREF_FUZZY_INDEX[norm] = entry;
+                }
+            });
+        }
     });
 }
 
@@ -281,18 +398,21 @@ function renderDatasetSelector(activeId) {
 /* ── Category Pills ── */
 var pillStates = {};
 
-function buildCategoryPills() {
+function buildCategoryPills(preserveStates) {
     var container = document.getElementById('categoryPills');
     container.innerHTML = '';
+    var oldStates = preserveStates ? Object.assign({}, pillStates) : {};
     pillStates = {};
 
     ALL_FILTER_KEYS.forEach(function(key) {
-        pillStates[key] = 'Any';
+        pillStates[key] = oldStates[key] || 'Any';
         var btn = document.createElement('button');
         btn.className = 'pill';
         btn.id = 'pill-' + key;
         btn.dataset.key = key;
-        btn.dataset.state = 'Any';
+        btn.dataset.state = pillStates[key];
+        if (pillStates[key] === 'Include') btn.classList.add('pill-include');
+        else if (pillStates[key] === 'Exclude') btn.classList.add('pill-exclude');
         var displayName = key === 'None' ? 'none' : categoryShort(key);
         btn.textContent = displayName;
         btn.title = key === 'None' ? 'Prompts with no categories flagged' : (checkboxDefinitionMapping[key] || '');
@@ -312,6 +432,7 @@ function cyclePillState(key) {
     else pillStates[key] = 'Any';
     updatePillDisplay(key);
     generateSubset();
+    updateHash();
 }
 
 function setPillState(key, state) {
@@ -350,9 +471,15 @@ function escapeHtml(str) {
     });
 }
 
-function highlightPrompt(text, search) {
-    if (!search) return escapeHtml(text);
-    var regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+function highlightPrompt(text, search, searchTerms) {
+    if (!search && (!searchTerms || !searchTerms.length)) return escapeHtml(text);
+    var terms = searchTerms && searchTerms.length ? searchTerms : [search];
+    // Build single regex from all terms
+    var escaped = terms.filter(Boolean).map(function(t) {
+        return t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    });
+    if (!escaped.length) return escapeHtml(text);
+    var regex = new RegExp('(' + escaped.join('|') + ')', 'gi');
     var last = 0, out = '', match;
     while ((match = regex.exec(text)) !== null) {
         out += escapeHtml(text.slice(last, match.index));
@@ -361,6 +488,126 @@ function highlightPrompt(text, search) {
     }
     out += escapeHtml(text.slice(last));
     return out;
+}
+
+/* ── Boolean Search Parser ── */
+function tokenizeQuery(input) {
+    var tokens = [];
+    var i = 0;
+    while (i < input.length) {
+        // Skip whitespace
+        if (input[i] === ' ' || input[i] === '\t') { i++; continue; }
+        // Quoted phrase
+        if (input[i] === '"') {
+            var end = input.indexOf('"', i + 1);
+            if (end === -1) end = input.length;
+            tokens.push({ type: 'TERM', value: input.slice(i + 1, end).toLowerCase() });
+            i = end + 1;
+            continue;
+        }
+        // Read word
+        var start = i;
+        while (i < input.length && input[i] !== ' ' && input[i] !== '\t' && input[i] !== '"') i++;
+        var word = input.slice(start, i);
+        var upper = word.toUpperCase();
+        if (upper === 'AND') tokens.push({ type: 'AND' });
+        else if (upper === 'OR') tokens.push({ type: 'OR' });
+        else if (upper === 'NOT') tokens.push({ type: 'NOT' });
+        else tokens.push({ type: 'TERM', value: word.toLowerCase() });
+    }
+    return tokens;
+}
+
+function parseQuery(tokens) {
+    var pos = 0;
+    function parseOr() {
+        var left = parseAnd();
+        while (pos < tokens.length && tokens[pos].type === 'OR') {
+            pos++;
+            var right = parseAnd();
+            left = { type: 'OR', left: left, right: right };
+        }
+        return left;
+    }
+    function parseAnd() {
+        var left = parseNot();
+        while (pos < tokens.length && (tokens[pos].type === 'AND' || tokens[pos].type === 'TERM' || tokens[pos].type === 'NOT')) {
+            if (tokens[pos].type === 'AND') pos++;
+            var right = parseNot();
+            left = { type: 'AND', left: left, right: right };
+        }
+        return left;
+    }
+    function parseNot() {
+        if (pos < tokens.length && tokens[pos].type === 'NOT') {
+            pos++;
+            var operand = parseNot();
+            return { type: 'NOT', operand: operand };
+        }
+        return parsePrimary();
+    }
+    function parsePrimary() {
+        if (pos < tokens.length && tokens[pos].type === 'TERM') {
+            var node = { type: 'TERM', value: tokens[pos].value };
+            pos++;
+            return node;
+        }
+        // Fallback: treat as empty match-all
+        return { type: 'TERM', value: '' };
+    }
+    if (tokens.length === 0) return null;
+    var ast = parseOr();
+    return ast;
+}
+
+function evalQuery(ast, text) {
+    if (!ast) return true;
+    switch (ast.type) {
+        case 'TERM': return ast.value === '' || text.indexOf(ast.value) !== -1;
+        case 'AND': return evalQuery(ast.left, text) && evalQuery(ast.right, text);
+        case 'OR': return evalQuery(ast.left, text) || evalQuery(ast.right, text);
+        case 'NOT': return !evalQuery(ast.operand, text);
+    }
+    return true;
+}
+
+function extractTerms(ast) {
+    if (!ast) return [];
+    switch (ast.type) {
+        case 'TERM': return ast.value ? [ast.value] : [];
+        case 'AND': return extractTerms(ast.left).concat(extractTerms(ast.right));
+        case 'OR': return extractTerms(ast.left).concat(extractTerms(ast.right));
+        case 'NOT': return []; // Skip NOT branches for highlighting
+    }
+    return [];
+}
+
+function buildSearchFn(rawQuery) {
+    var query = rawQuery.trim();
+    if (!query) return null;
+    // Fast path: single word without operators
+    if (!/\b(AND|OR|NOT)\b/.test(query) && query.indexOf('"') === -1 && query.indexOf(' ') === -1) {
+        var lower = query.toLowerCase();
+        return {
+            test: function(text) { return text.indexOf(lower) !== -1; },
+            terms: [lower],
+            description: lower
+        };
+    }
+    var tokens = tokenizeQuery(query);
+    var ast = parseQuery(tokens);
+    if (!ast) return null;
+    var terms = extractTerms(ast);
+    // Build description from tokens
+    var desc = tokens.map(function(t) {
+        if (t.type === 'TERM') return '"' + t.value + '"';
+        return t.type;
+    }).join(' ');
+    return {
+        test: function(text) { return evalQuery(ast, text.toLowerCase()); },
+        terms: terms,
+        description: desc
+    };
 }
 
 /* ── Counting functions ── */
@@ -729,6 +976,118 @@ function renderConsensus(entry, data) {
     drawAgreementSummary(canvas, crossData, function(k) { return k; });
 }
 
+/* ── Concept Comparison (Feature 10) ── */
+function buildConceptSelector(reg) {
+    var select = document.getElementById('conceptSelector');
+    if (!select || !reg || !reg.datasets) return;
+    select.innerHTML = '';
+
+    // Build concept → {datasetId → [category names]}
+    var conceptMap = {};
+    reg.datasets.forEach(function(ds) {
+        ds.categories.forEach(function(cat) {
+            var concepts = cat.concept;
+            if (!concepts) return;
+            if (!Array.isArray(concepts)) concepts = [concepts];
+            concepts.forEach(function(c) {
+                if (!conceptMap[c]) conceptMap[c] = {};
+                if (!conceptMap[c][ds.id]) conceptMap[c][ds.id] = [];
+                conceptMap[c][ds.id].push(cat.key);
+            });
+        });
+    });
+
+    // Sort by coverage (most datasets first)
+    var conceptList = Object.keys(conceptMap).sort(function(a, b) {
+        var coverA = Object.keys(conceptMap[a]).length;
+        var coverB = Object.keys(conceptMap[b]).length;
+        if (coverB !== coverA) return coverB - coverA;
+        return a.localeCompare(b);
+    });
+
+    conceptList.forEach(function(c) {
+        var opt = document.createElement('option');
+        opt.value = c;
+        var coverage = Object.keys(conceptMap[c]).length;
+        opt.textContent = c + ' (' + coverage + ' datasets)';
+        select.appendChild(opt);
+    });
+
+    window._conceptMap = conceptMap;
+
+    select.addEventListener('change', function() {
+        renderConceptComparison(this.value, reg);
+    });
+
+    // Render initial selection
+    if (conceptList.length) {
+        renderConceptComparison(conceptList[0], reg);
+    }
+}
+
+function renderConceptComparison(concept, reg) {
+    var conceptMap = window._conceptMap;
+    if (!conceptMap || !conceptMap[concept]) return;
+
+    var dsNames = {};
+    var dsShortNames = {};
+    reg.datasets.forEach(function(ds) {
+        dsNames[ds.id] = ds.name;
+        dsShortNames[ds.id] = ds.name.replace('Jigsaw Toxic Comments', 'Jigsaw')
+            .replace('OpenAI Moderation', 'OpenAI')
+            .replace('PKU-SafeRLHF', 'SafeRLHF')
+            .replace('NVIDIA Aegis v2', 'Aegis');
+    });
+
+    var catShortMap = {};
+    reg.datasets.forEach(function(ds) {
+        var map = {};
+        ds.categories.forEach(function(c) { map[c.key] = c.short || c.name; });
+        catShortMap[ds.id] = map;
+    });
+
+    var datasets = [];
+    var detailParts = [];
+    var mapping = conceptMap[concept];
+
+    reg.datasets.forEach(function(ds) {
+        if (!mapping[ds.id]) return;
+        var catKeys = mapping[ds.id];
+        var stats = ds.stats;
+        if (!stats) return;
+
+        var totalRows = stats.totalRows || 1;
+        var catCounts = stats.categoryCounts || {};
+        var exclRatios = stats.exclusivityRatios || {};
+
+        // Sum flagged across all category keys for this concept
+        var flagged = 0;
+        var exclSum = 0;
+        catKeys.forEach(function(k) {
+            flagged += catCounts[k] || 0;
+            exclSum += exclRatios[k] || 0;
+        });
+        var avgExcl = catKeys.length > 0 ? exclSum / catKeys.length : 0;
+        var catNames = catKeys.map(function(k) { return (catShortMap[ds.id] || {})[k] || k; }).join(', ');
+
+        datasets.push({
+            name: dsShortNames[ds.id],
+            flaggedPct: flagged / totalRows,
+            exclusivityRatio: avgExcl,
+            catNames: catNames
+        });
+
+        detailParts.push(dsShortNames[ds.id] + ': ' + catNames);
+    });
+
+    drawConceptComparison(document.getElementById('conceptComparisonCanvas'), datasets);
+
+    var detail = document.getElementById('conceptDetail');
+    if (detail) {
+        detail.textContent = detailParts.join('  \u2022  ');
+    }
+}
+
 /* ── Surprise metric helpers ── */
 function getComboKey(row) {
     var flagged = KEYS.filter(function(k) { return row[k] === 1; }).sort();
@@ -826,11 +1185,49 @@ function computeWordCounts(data) {
     return counts;
 }
 
+/* ── Sort state ── */
+var currentSort = { column: 'surprise', direction: 'desc' };
+
+function applySortToSubset() {
+    var col = currentSort.column;
+    var dir = currentSort.direction === 'asc' ? 1 : -1;
+    var textField = (activeSchema && activeSchema.textField) || 'prompt';
+
+    currentSubset.sort(function(a, b) {
+        var cmp = 0;
+        if (col === 'prompt') {
+            var ta = (a[textField] || a.prompt || '').toLowerCase();
+            var tb = (b[textField] || b.prompt || '').toLowerCase();
+            cmp = ta < tb ? -1 : ta > tb ? 1 : 0;
+        } else if (col === 'surprise') {
+            cmp = computeSurpriseScore(a) - computeSurpriseScore(b);
+        } else if (col === 'catcount') {
+            var ca = KEYS.filter(function(k) { return a[k] === 1; }).length;
+            var cb = KEYS.filter(function(k) { return b[k] === 1; }).length;
+            cmp = ca - cb;
+        }
+        return cmp * dir;
+    });
+}
+
+function updateSortIndicators() {
+    var headers = document.querySelectorAll('#results .sortable-header');
+    headers.forEach(function(th) {
+        var indicator = th.querySelector('.sort-indicator');
+        if (th.getAttribute('data-sort') === currentSort.column) {
+            indicator.textContent = currentSort.direction === 'asc' ? ' \u25B4' : ' \u25BE';
+        } else {
+            indicator.textContent = '';
+        }
+    });
+}
+
 /* ── Virtual Scrolling ── */
 var VIRTUAL_ROW_HEIGHT = 42;
 var VIRTUAL_BUFFER = 10;
 var currentSubset = [];
 var currentRawQuery = '';
+var currentSearchTerms = [];
 var currentMaxSurprise = 1;
 
 function buildResultRow(row, rawQuery, maxSurprise) {
@@ -839,15 +1236,22 @@ function buildResultRow(row, rawQuery, maxSurprise) {
 
     // Prompt cell
     var td1 = document.createElement('td');
-    var promptHtml = highlightPrompt(prompt || 'N/A', rawQuery);
+    var promptHtml = highlightPrompt(prompt || 'N/A', rawQuery, currentSearchTerms);
 
-    // Check xref match
+    // Check xref match (exact first, then fuzzy)
     var normP = normalizePrompt(prompt);
     var xrefMatch = XREF_INDEX[normP];
     if (xrefMatch && xrefMatch.matches.length > 1) {
         promptHtml += ' <span class="xref-indicator" data-prompt="' +
             normP.replace(/"/g, '&quot;') + '">\u2194\uFE0E ' +
             xrefMatch.matches.length + ' datasets</span>';
+    } else {
+        var fuzzyMatch = XREF_FUZZY_INDEX[normP];
+        if (fuzzyMatch) {
+            var simPct = Math.round(fuzzyMatch.similarity * 100);
+            promptHtml += ' <span class="xref-indicator fuzzy-indicator" data-fuzzy="' +
+                normP.replace(/"/g, '&quot;') + '">~' + simPct + '% match</span>';
+        }
     }
     td1.innerHTML = promptHtml;
     tr.appendChild(td1);
@@ -1013,6 +1417,13 @@ function updateVisualizations(subset) {
         categoryShort
     );
 
+    // Co-occurrence network graph
+    drawCooccurrenceNetwork(
+        document.getElementById('networkCanvas'),
+        pairCounts, singleCounts, KEYS,
+        categoryShort
+    );
+
     // Word frequency strip
     lastWordCounts = computeWordCounts(subset);
     renderWordFrequencyStrip(
@@ -1059,8 +1470,17 @@ function updateVisualizations(subset) {
 function generateSubset(event) {
     if (event) event.preventDefault();
     var rawQuery = document.getElementById('searchQuery').value.trim();
-    var query = rawQuery.toLowerCase();
     var textField = (activeSchema && activeSchema.textField) || 'prompt';
+
+    // Build boolean search function
+    var searchFn = buildSearchFn(rawQuery);
+    currentSearchTerms = searchFn ? searchFn.terms : [];
+
+    // Show parsed interpretation
+    var parsedEl = document.getElementById('searchParsed');
+    if (parsedEl) {
+        parsedEl.textContent = (searchFn && rawQuery.indexOf(' ') !== -1) ? 'Parsed: ' + searchFn.description : '';
+    }
 
     var values = {};
     ALL_FILTER_KEYS.forEach(function(key) {
@@ -1077,20 +1497,16 @@ function generateSubset(event) {
             if (selected === 'Exclude') return rowValue === '0';
             return true;
         });
+        if (!match) return false;
+        if (!searchFn) return true;
         var text = row[textField] || row.prompt || '';
-        return match && (query === '' || text.toLowerCase().includes(query));
+        return searchFn.test(text);
     });
 
-    // Determine if default (unfiltered) view for surprise sorting
-    var isDefaultView = !rawQuery &&
-        ALL_FILTER_KEYS.every(function(key) { return (pillStates[key] || 'Any') === 'Any'; });
-
-    // Sort by surprise descending in default view
-    if (isDefaultView && window.COMBO_FREQS) {
-        subset.sort(function(a, b) {
-            return computeSurpriseScore(b) - computeSurpriseScore(a);
-        });
-    }
+    // Update virtual scroll state and apply sort
+    currentSubset = subset;
+    applySortToSubset();
+    updateSortIndicators();
 
     // Find max surprise for bar normalization
     var maxSurprise = 0;
@@ -1103,8 +1519,8 @@ function generateSubset(event) {
     if (maxSurprise === 0) maxSurprise = 1;
 
     // Update virtual scroll state and render
-    document.getElementById('match-count').textContent = subset.length.toLocaleString() + ' Matching prompts';
-    currentSubset = subset;
+    document.getElementById('match-count').firstChild.textContent = subset.length.toLocaleString() + ' Matching prompts ';
+    document.getElementById('exportCsvBtn').textContent = 'Export CSV (' + subset.length.toLocaleString() + ')';
     currentRawQuery = rawQuery;
     currentMaxSurprise = maxSurprise;
 
@@ -1153,13 +1569,20 @@ function switchDataset(id) {
         // Hide xref panel on dataset switch
         document.getElementById('xrefPanel').style.display = 'none';
 
-        // Reset filters and search
+        // Reset filters, search, and sort
         resetPills();
         document.getElementById('searchQuery').value = '';
         document.getElementById('wordBreakdownPanel').innerHTML = '';
+        currentSort = { column: 'surprise', direction: 'desc' };
+
+        // Apply pending URL state if present (initial load from hash)
+        if (pendingUrlState) {
+            applyUrlState(pendingUrlState);
+            pendingUrlState = null;
+        }
 
         generateSubset();
-        history.replaceState(null, '', '#' + id);
+        updateHash();
     }).catch(function(err) {
         updateLoadingText('Error loading ' + entry.name + ': ' + (err.message || err));
         console.error(err);
@@ -1189,12 +1612,111 @@ document.getElementById('searchQuery').addEventListener('input', function() {
     var panel = document.getElementById('wordBreakdownPanel');
     if (panel) panel.innerHTML = '';
     generateSubset();
+    updateHash();
+});
+
+/* ── CSV Export ── */
+function csvEscape(val) {
+    var s = String(val == null ? '' : val);
+    if (s.indexOf(',') !== -1 || s.indexOf('"') !== -1 || s.indexOf('\n') !== -1) {
+        return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+}
+
+function exportFilteredCsv() {
+    if (!currentSubset.length || !activeSchema) return;
+    var textField = activeSchema.textField || 'prompt';
+    var headers = [textField].concat(KEYS).concat(['surprise_score']);
+    var lines = [headers.join(',')];
+
+    currentSubset.forEach(function(row) {
+        var vals = [csvEscape(row[textField] || row.prompt || '')];
+        KEYS.forEach(function(k) { vals.push(row[k] || 0); });
+        vals.push(computeSurpriseScore(row).toFixed(4));
+        lines.push(vals.join(','));
+    });
+
+    var csv = lines.join('\n');
+    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    var ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    a.download = 'wtla-' + activeSchema.id + '-' + ts + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+document.getElementById('exportCsvBtn').addEventListener('click', exportFilteredCsv);
+
+/* ── Sortable table header handler ── */
+document.querySelector('#results thead').addEventListener('click', function(e) {
+    var th = e.target.closest('.sortable-header');
+    if (!th) return;
+    var col = th.getAttribute('data-sort');
+    if (currentSort.column === col) {
+        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        currentSort.column = col;
+        // Default directions: surprise desc, catcount desc, prompt asc
+        currentSort.direction = col === 'prompt' ? 'asc' : 'desc';
+    }
+    applySortToSubset();
+    updateSortIndicators();
+    var container = document.getElementById('resultsVirtual');
+    container.scrollTop = 0;
+    renderVirtualTable();
+});
+
+/* ── Category order toggle handler ── */
+document.getElementById('orderToggle').addEventListener('click', function() {
+    categoryOrder = categoryOrder === 'schema' ? 'frequency' : 'schema';
+    this.textContent = 'order: ' + categoryOrder;
+    reorderKeys();
+    buildCategoryPills(true);
+    generateSubset();
+    updateHash();
 });
 
 /* ── Doppelganger: xref click handlers ── */
 document.getElementById('resultsVirtual').addEventListener('click', function(e) {
     var indicator = e.target.closest('.xref-indicator');
     if (!indicator) return;
+
+    // Check for fuzzy match
+    var fuzzyKey = indicator.getAttribute('data-fuzzy');
+    if (fuzzyKey) {
+        var fuzzyEntry = XREF_FUZZY_INDEX[fuzzyKey];
+        if (!fuzzyEntry) return;
+        var panel = document.getElementById('xrefPanel');
+        var content = document.getElementById('xrefContent');
+        content.innerHTML = '';
+
+        var simP = document.createElement('p');
+        simP.style.cssText = 'font-size:0.82em;color:#888;margin-bottom:0.5rem;font-family:system-ui,-apple-system,sans-serif;';
+        simP.textContent = 'Fuzzy match (' + Math.round(fuzzyEntry.similarity * 100) + '% Jaccard similarity)';
+        content.appendChild(simP);
+
+        renderCrossDatasetMatch(content, {
+            prompt: fuzzyEntry.prompts[0],
+            matches: fuzzyEntry.matches
+        }, registry);
+
+        if (fuzzyEntry.prompts.length > 1) {
+            var altP = document.createElement('p');
+            altP.style.cssText = 'font-size:0.82em;color:#666;margin-top:0.5rem;';
+            altP.textContent = 'Similar text: \u201C' + fuzzyEntry.prompts[1].slice(0, 150) + '\u201D';
+            content.appendChild(altP);
+        }
+
+        panel.style.display = '';
+        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        return;
+    }
+
     var normPrompt = indicator.getAttribute('data-prompt');
     var xrefEntry = XREF_INDEX[normPrompt];
     if (!xrefEntry) return;
@@ -1213,22 +1735,28 @@ document.getElementById('xrefClose').addEventListener('click', function() {
 /* ── Boot: load registry + xref, then default dataset ── */
 showLoading('Loading dataset registry...');
 
-Promise.all([loadRegistry(), loadXref()]).then(function(results) {
+Promise.all([loadRegistry(), loadXref(), loadFuzzyXref()]).then(function(results) {
     var reg = results[0];
     var xref = results[1];
+    var fuzzyXref = results[2];
     registry = reg;
-    buildXrefIndex(xref);
+    buildXrefIndex(xref, fuzzyXref);
 
     // Render registry-only visualizations (no dataset loading needed)
     renderTaxonomyAlignment(document.getElementById('rosettaTable'), reg);
     drawTaxonomyTimeline(document.getElementById('timelineCanvas'), reg);
     drawExclusivityTrend(document.getElementById('exclusivityTrendCanvas'), reg);
+    buildConceptSelector(reg);
 
     // Determine initial dataset from URL hash
-    var hash = location.hash.replace('#', '');
+    var hashState = parseHash();
     var defaultId = 'openai';
-    if (hash && reg.datasets.some(function(d) { return d.id === hash; })) {
-        defaultId = hash;
+    if (hashState.dataset && reg.datasets.some(function(d) { return d.id === hashState.dataset; })) {
+        defaultId = hashState.dataset;
+        // If hash has filters/search, set pending state for after load
+        if (hashState.include || hashState.exclude || hashState.search || hashState.order) {
+            pendingUrlState = hashState;
+        }
     }
 
     switchDataset(defaultId);

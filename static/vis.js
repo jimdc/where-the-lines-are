@@ -916,7 +916,203 @@ function drawExclusivityTrend(canvas, registry) {
     });
 }
 
-/* ── 12. Doppelganger: Cross-Dataset Match Panel (DOM) ── */
+/* ── 11. Co-occurrence Network Graph (Force-Directed) ── */
+
+function drawCooccurrenceNetwork(canvas, pairCounts, singleCounts, keys, namesFn) {
+    var n = keys.length;
+    if (n < 2) { canvas.style.display = 'none'; return; }
+    canvas.style.display = '';
+
+    var W = 500, H = 400;
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, W, H);
+
+    // Find max single count for node sizing
+    var maxSingle = 0;
+    keys.forEach(function(k) {
+        var c = singleCounts[k] || 0;
+        if (c > maxSingle) maxSingle = c;
+    });
+    if (maxSingle === 0) maxSingle = 1;
+
+    // Build edges with weights
+    var edges = [];
+    var maxWeight = 0;
+    for (var i = 0; i < n; i++) {
+        for (var j = i + 1; j < n; j++) {
+            var pair = keys[i] + '+' + keys[j];
+            var w = pairCounts[pair] || 0;
+            if (w > 0) {
+                edges.push({ i: i, j: j, w: w });
+                if (w > maxWeight) maxWeight = w;
+            }
+        }
+    }
+    if (maxWeight === 0) maxWeight = 1;
+
+    // Filter to above-median edges to avoid hairball
+    var weights = edges.map(function(e) { return e.w; }).sort(function(a, b) { return a - b; });
+    var medianW = weights.length > 0 ? weights[Math.floor(weights.length / 2)] : 0;
+    var visibleEdges = edges.filter(function(e) { return e.w >= medianW; });
+
+    // Initialize nodes in circular layout
+    var cx = W / 2, cy = H / 2;
+    var layoutR = Math.min(W, H) * 0.35;
+    var nodes = keys.map(function(k, idx) {
+        var angle = (2 * Math.PI * idx) / n - Math.PI / 2;
+        return {
+            x: cx + layoutR * Math.cos(angle),
+            y: cy + layoutR * Math.sin(angle),
+            vx: 0, vy: 0,
+            r: 4 + 10 * ((singleCounts[k] || 0) / maxSingle)
+        };
+    });
+
+    // Simple force simulation: 150 iterations
+    for (var iter = 0; iter < 150; iter++) {
+        var alpha = 1 - iter / 150;
+        // Coulomb repulsion
+        for (var a = 0; a < n; a++) {
+            for (var b = a + 1; b < n; b++) {
+                var dx = nodes[b].x - nodes[a].x;
+                var dy = nodes[b].y - nodes[a].y;
+                var dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                var force = 800 * alpha / (dist * dist);
+                var fx = dx / dist * force;
+                var fy = dy / dist * force;
+                nodes[a].vx -= fx; nodes[a].vy -= fy;
+                nodes[b].vx += fx; nodes[b].vy += fy;
+            }
+        }
+        // Hooke attraction (edges)
+        visibleEdges.forEach(function(e) {
+            var na = nodes[e.i], nb = nodes[e.j];
+            var dx = nb.x - na.x;
+            var dy = nb.y - na.y;
+            var dist = Math.sqrt(dx * dx + dy * dy) || 1;
+            var strength = 0.05 * alpha * (e.w / maxWeight);
+            var fx = dx * strength;
+            var fy = dy * strength;
+            na.vx += fx; na.vy += fy;
+            nb.vx -= fx; nb.vy -= fy;
+        });
+        // Center gravity
+        for (var c = 0; c < n; c++) {
+            nodes[c].vx += (cx - nodes[c].x) * 0.01 * alpha;
+            nodes[c].vy += (cy - nodes[c].y) * 0.01 * alpha;
+        }
+        // Apply velocity
+        for (var d = 0; d < n; d++) {
+            nodes[d].x += nodes[d].vx * 0.3;
+            nodes[d].y += nodes[d].vy * 0.3;
+            nodes[d].vx *= 0.8;
+            nodes[d].vy *= 0.8;
+            // Clamp to canvas bounds
+            var pad = nodes[d].r + 20;
+            nodes[d].x = Math.max(pad, Math.min(W - pad, nodes[d].x));
+            nodes[d].y = Math.max(pad, Math.min(H - pad, nodes[d].y));
+        }
+    }
+
+    // Draw edges
+    visibleEdges.forEach(function(e) {
+        var na = nodes[e.i], nb = nodes[e.j];
+        var intensity = e.w / maxWeight;
+        var gray = Math.round(200 - intensity * 160);
+        ctx.strokeStyle = 'rgb(' + gray + ',' + gray + ',' + gray + ')';
+        ctx.lineWidth = 0.5 + intensity * 2.5;
+        ctx.beginPath();
+        ctx.moveTo(na.x, na.y);
+        ctx.lineTo(nb.x, nb.y);
+        ctx.stroke();
+    });
+
+    // Draw nodes
+    for (var ni = 0; ni < n; ni++) {
+        var nd = nodes[ni];
+        ctx.fillStyle = '#444';
+        ctx.beginPath();
+        ctx.arc(nd.x, nd.y, nd.r, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Draw labels
+    var fontSize = n > 16 ? 8 : 10;
+    ctx.font = fontSize + 'px system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillStyle = '#222';
+    for (var li = 0; li < n; li++) {
+        var lnd = nodes[li];
+        var label = namesFn ? namesFn(keys[li]) : keys[li];
+        if (label.length > 14) label = label.slice(0, 13) + '\u2026';
+        ctx.fillText(label, lnd.x, lnd.y - lnd.r - 2);
+    }
+}
+
+/* ── 12. Concept Comparison (Grouped Bars) ── */
+
+function drawConceptComparison(canvas, datasets) {
+    // datasets: [{name, flaggedPct, exclusivityRatio, catNames}]
+    if (!datasets || !datasets.length) { canvas.style.display = 'none'; return; }
+    canvas.style.display = '';
+
+    var n = datasets.length;
+    var rowHeight = 36;
+    var nameWidth = 100;
+    var barAreaWidth = 250;
+    var labelWidth = 200;
+    var totalWidth = nameWidth + barAreaWidth + labelWidth;
+    var totalHeight = n * rowHeight + 4;
+
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = totalWidth * dpr;
+    canvas.height = totalHeight * dpr;
+    canvas.style.width = totalWidth + 'px';
+    canvas.style.height = totalHeight + 'px';
+
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, totalWidth, totalHeight);
+
+    datasets.forEach(function(ds, i) {
+        var y = i * rowHeight + rowHeight / 2 + 2;
+
+        // Dataset name
+        ctx.fillStyle = '#333';
+        ctx.font = '11px system-ui, -apple-system, sans-serif';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(ds.name, nameWidth - 8, y);
+
+        // Flagged % bar (dark)
+        var flaggedW = ds.flaggedPct * (barAreaWidth - 10);
+        ctx.fillStyle = '#333';
+        ctx.fillRect(nameWidth, y - 7, flaggedW, 8);
+
+        // Exclusivity ratio bar (light, below)
+        var exclW = ds.exclusivityRatio * (barAreaWidth - 10);
+        ctx.fillStyle = '#bbb';
+        ctx.fillRect(nameWidth, y + 2, exclW, 5);
+
+        // Labels
+        ctx.fillStyle = '#666';
+        ctx.font = '10px system-ui, -apple-system, sans-serif';
+        ctx.textAlign = 'left';
+        var flagPct = Math.round(ds.flaggedPct * 100);
+        var exclPct = Math.round(ds.exclusivityRatio * 100);
+        ctx.fillText(flagPct + '% flagged  \u00B7  ' + exclPct + '% exclusive  \u00B7  ' + ds.catNames, nameWidth + barAreaWidth, y);
+    });
+}
+
+/* ── 13. Doppelganger: Cross-Dataset Match Panel (DOM) ── */
 
 function renderCrossDatasetMatch(container, xrefEntry, registry) {
     container.innerHTML = '';

@@ -63,6 +63,35 @@ function loadXref() {
     });
 }
 
+function loadFuzzyXref() {
+    return new Promise(function(resolve, reject) {
+        if (location.protocol === 'file:') {
+            var script = document.createElement('script');
+            script.src = 'datasets/xref-fuzzy.js';
+            script.onload = function() {
+                if (typeof window.dataset_xref_fuzzy !== 'undefined') {
+                    resolve(window.dataset_xref_fuzzy);
+                } else {
+                    reject(new Error('xref-fuzzy.js loaded but dataset_xref_fuzzy not defined'));
+                }
+            };
+            script.onerror = function() {
+                // fuzzy xref is optional — resolve empty if missing
+                resolve([]);
+            };
+            document.head.appendChild(script);
+        } else {
+            fetch('datasets/xref-fuzzy.json')
+                .then(function(r) {
+                    if (!r.ok) return [];
+                    return r.json();
+                })
+                .then(resolve)
+                .catch(function() { resolve([]); });
+        }
+    });
+}
+
 function loadDataset(jsonPath, jsPath) {
     return new Promise(function(resolve, reject) {
         if (location.protocol === 'file:') {
