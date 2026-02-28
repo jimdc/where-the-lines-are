@@ -589,7 +589,7 @@ function buildSearchFn(rawQuery) {
     if (!/\b(AND|OR|NOT)\b/.test(query) && query.indexOf('"') === -1 && query.indexOf(' ') === -1) {
         var lower = query.toLowerCase();
         return {
-            test: function(text) { return text.indexOf(lower) !== -1; },
+            test: function(text) { return text.toLowerCase().indexOf(lower) !== -1; },
             terms: [lower],
             description: lower
         };
