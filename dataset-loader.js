@@ -1,5 +1,5 @@
 /**
- * Dataset loader for explore-wrongthink.
+ * Dataset loader for where-the-lines-are.
  *
  * Provides loadRegistry() and loadDataset(jsonPath, jsPath) functions.
  * Supports both file:// (loads .js wrappers) and http(s):// (fetches .json).
@@ -30,6 +30,35 @@ function loadRegistry() {
                 })
                 .then(resolve)
                 .catch(reject);
+        }
+    });
+}
+
+function loadXref() {
+    return new Promise(function(resolve, reject) {
+        if (location.protocol === 'file:') {
+            var script = document.createElement('script');
+            script.src = 'datasets/xref.js';
+            script.onload = function() {
+                if (typeof window.dataset_xref !== 'undefined') {
+                    resolve(window.dataset_xref);
+                } else {
+                    reject(new Error('xref.js loaded but dataset_xref not defined'));
+                }
+            };
+            script.onerror = function() {
+                // xref is optional — resolve empty if missing
+                resolve([]);
+            };
+            document.head.appendChild(script);
+        } else {
+            fetch('datasets/xref.json')
+                .then(function(r) {
+                    if (!r.ok) return [];
+                    return r.json();
+                })
+                .then(resolve)
+                .catch(function() { resolve([]); });
         }
     });
 }

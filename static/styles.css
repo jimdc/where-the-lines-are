@@ -401,6 +401,73 @@ mark {
     margin-top: 1.5rem;
 }
 
+/* ── Rosetta Stone Table ── */
+.rosetta-table {
+    table-layout: auto;
+    width: auto;
+    max-width: 100%;
+    font-size: 0.82em;
+}
+.rosetta-table th,
+.rosetta-table td {
+    padding: 0.25rem 0.6rem;
+    white-space: nowrap;
+    border-bottom: 1px solid #e8e8e8;
+}
+.rosetta-ds-header {
+    font-size: 0.85em;
+    color: #555;
+    text-align: center;
+}
+.rosetta-concept {
+    font-weight: 600;
+    color: #333;
+}
+.rosetta-empty {
+    color: #ccc;
+    text-align: center;
+}
+
+#rosettaSection { margin: 1rem 0 0.5rem; }
+#driftSection { margin: 0.5rem 0 1rem; }
+#driftSection h3 {
+    font-size: 1rem;
+    font-weight: 400;
+    font-style: italic;
+    color: #333;
+    margin: 1rem 0 0.25rem;
+}
+
+/* ── Xref Indicator ── */
+.xref-indicator {
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 0.72em;
+    color: #888;
+    cursor: pointer;
+    border-bottom: 1px dashed #aaa;
+    padding: 0 0.15rem;
+    margin-left: 0.3rem;
+    white-space: nowrap;
+}
+.xref-indicator:hover {
+    color: #333;
+    border-bottom-color: #333;
+}
+
+/* ── Xref Panel ── */
+#xrefPanel {
+    margin: 1rem 0;
+    padding: 0.75rem 1rem;
+    border-left: 3px solid #333;
+    background: #fafafa;
+}
+#xrefPanel h2 {
+    margin-top: 0;
+}
+
+/* ── Consensus Section ── */
+#consensusSection { margin: 0.5rem 0 1rem; }
+
 /* ── Responsive ── */
 @media (max-width: 700px) {
     #wordRow {

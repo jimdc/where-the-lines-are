@@ -1,10 +1,10 @@
-# Explore-wrongthink
+# Where the Lines Are
 
 **Content warning**: this tool displays real-world text that was flagged as harmful. Expect shocking language.
 
 ## What is this?
 
-Explore-wrongthink is a visualization tool for studying how content moderation categories overlap, co-occur, and cluster in real prompt data. It treats a classification dataset not as a lookup table but as a structure worth seeing — a place where patterns in how humans produce harmful text become visible through careful graphic design.
+Where the Lines Are is a visualization tool for studying how content moderation categories overlap, co-occur, and cluster in real prompt data. It treats a classification dataset not as a lookup table but as a structure worth seeing — a place where patterns in how humans produce harmful text become visible through careful graphic design.
 
 The interface follows Edward Tufte's principles from *The Visual Display of Quantitative Information*: maximize data density, eliminate chartjunk, label everything directly, and let the data speak through its structure rather than through decoration. Every pixel either carries data or gets out of the way.
 
@@ -36,7 +36,11 @@ Moderation categories are not independent. The visualizations expose their hidde
 
 **The binary matrix shows population structure.** Each row of data becomes a thin strip of dark and light cells. Vertical dark bands show which categories dominate; horizontal patterns reveal clusters; scattered dark cells mark outliers. BeaverTails renders 300K rows at full density.
 
-**Cross-dataset comparison reveals taxonomy design choices.** The progression from 6 to 23 categories across 2018–2024 makes the evolution of "harm" visible. Jigsaw had no concept of self-harm, sexual content, or misinformation — these concerns entered the taxonomy with OpenAI in 2022. SafeRLHF added "mental manipulation" and "environmental damage" — categories absent from every earlier dataset. Aegis introduced "needs caution" and "unauthorized advice," reflecting the shift from binary harm detection to nuanced safety guardrailing. Switching between datasets makes these design choices visible through the same set of visualizations.
+**Cross-dataset comparison reveals taxonomy design choices.** The Rosetta Stone table maps ~20 harm concepts across all five datasets, showing how "privacy" becomes "PII/privacy" in Aegis, or how "minors" is split from "sexual" in some taxonomies but merged in others. The Drift timeline shows this evolution chronologically — bold entries mark concepts appearing for the first time.
+
+**Annotators disagree more than you'd expect.** The Split Verdict chart (SafeRLHF) shows that two independently classified responses disagree 8% of the time on privacy, but only 1% on trafficking. The safer response is not the better one 24% of the time. For Aegis, human labels agree perfectly while LLM jury labels diverge 36% between prompt and response safety.
+
+**Same prompt, different labels.** 6,640 prompts appear in two or more datasets. The Doppelganger feature marks these in the results table — click to see how each taxonomy classified the identical text. The Consensus chart summarizes concept-level agreement: hate and privacy get 60%+ agreement across datasets, while toxicity and harassment get 0% (concepts that only some datasets track).
 
 ## Design
 
@@ -52,17 +56,18 @@ Open `index.html` in a browser. Everything updates reactively — click a catego
 
 ```
 index.html              Main page
-dataset-loader.js       Registry + dataset loading (file:// and HTTP)
-static/vis.js           All canvas visualizations
+dataset-loader.js       Registry + dataset + xref loading (file:// and HTTP)
+static/vis.js           All canvas visualizations (~1000 lines)
 static/styles.css       Tufte-inspired stylesheet
 datasets/
-  registry.json         Dataset manifest with schemas
+  registry.json         Dataset manifest with schemas, concepts, stats
+  xref.json             Cross-dataset prompt matching index (6,640 entries, 1.2 MB)
   jigsaw.json           32,450 rows (13 MB)
   openai.json           1,680 rows (1.2 MB)
   beavertails.json      300,567 rows (51 MB)
-  saferlhf.json         38,640 rows (10 MB)
-  aegis.json            29,095 rows (13 MB)
+  saferlhf.json         38,640 rows (26 MB, includes divergence fields)
+  aegis.json            29,095 rows (14 MB, includes divergence fields)
   *.js                  JS wrappers for file:// protocol
 scripts/
-  preprocess.py         One-time HuggingFace → JSON pipeline
+  preprocess.py         One-time HuggingFace → JSON pipeline + stats + xref
 ```

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Preprocessing pipeline for explore-wrongthink datasets.
+Preprocessing pipeline for where-the-lines-are datasets.
 
 Downloads from HuggingFace, normalizes to {textField: str, key1: 0|1, ...},
 outputs JSON + JS wrappers for browser consumption.
@@ -8,10 +8,12 @@ outputs JSON + JS wrappers for browser consumption.
 Usage:
     python scripts/preprocess.py openai        # reformat existing data
     python scripts/preprocess.py beavertails   # download + normalize
-    python scripts/preprocess.py aegis         # download + normalize
+    python scripts/preprocess.py aegis         # download + normalize (+ divergence fields)
     python scripts/preprocess.py jigsaw        # download + normalize
-    python scripts/preprocess.py saferlhf      # download + normalize
+    python scripts/preprocess.py saferlhf      # download + normalize (+ divergence fields)
     python scripts/preprocess.py registry      # generate registry.json + .js
+    python scripts/preprocess.py stats         # compute per-dataset stats into registry
+    python scripts/preprocess.py xref          # build cross-dataset prompt index
     python scripts/preprocess.py all           # run all of the above
 """
 
@@ -151,7 +153,11 @@ def process_beavertails():
 
 
 def process_aegis():
-    """Download and normalize NVIDIA Aegis v2 dataset."""
+    """Download and normalize NVIDIA Aegis v2 dataset.
+
+    Also extracts prompt_label (_pl), response_label (_rl), and
+    response_label_source (_rls) for Split Verdict divergence analysis.
+    """
     print('Processing NVIDIA Aegis v2 dataset...')
     from datasets import load_dataset
 
@@ -163,8 +169,9 @@ def process_aegis():
     print(f'  Sample keys: {list(sample.keys())}')
     print(f'  Sample text_type: {sample.get("text_type", "N/A")}')
     print(f'  Sample violated_categories: {sample.get("violated_categories", "N/A")}')
-    print(f'  Sample labels_0: {sample.get("labels_0", "N/A")}')
-    print(f'  Sample labels_1: {sample.get("labels_1", "N/A")}')
+    print(f'  Sample prompt_label: {sample.get("prompt_label", "N/A")}')
+    print(f'  Sample response_label: {sample.get("response_label", "N/A")}')
+    print(f'  Sample response_label_source: {sample.get("response_label_source", "N/A")}')
 
     # Discover all violated categories
     all_cats = set()
@@ -203,6 +210,12 @@ def process_aegis():
         'Violence': 'VL',
     }
 
+    # Reverse map for label parsing: category name (various forms) -> short key
+    LABEL_MAP = dict(CAT_MAP)  # exact match first
+    # Also handle lowercase and common variants
+    for name, key in list(CAT_MAP.items()):
+        LABEL_MAP[name.lower()] = key
+
     # Warn about any undiscovered categories
     for cat in sorted(all_cats):
         if cat not in CAT_MAP:
@@ -221,7 +234,6 @@ def process_aegis():
 
     if not text_field:
         print(f'  Available fields: {list(sample.keys())}')
-        # Try the first string field
         for k, v in sample.items():
             if isinstance(v, str) and len(v) > 50:
                 text_field = k
@@ -229,8 +241,27 @@ def process_aegis():
 
     print(f'  Using text field: {text_field}')
 
+    def parse_label(label_str):
+        """Parse a label string into a category short key, or 'safe'."""
+        if not label_str or not label_str.strip():
+            return 'safe'
+        label = label_str.strip()
+        if label.lower() == 'safe':
+            return 'safe'
+        # Try exact match, then lowercase match
+        if label in LABEL_MAP:
+            return LABEL_MAP[label]
+        if label.lower() in LABEL_MAP:
+            return LABEL_MAP[label.lower()]
+        # Try partial match (label may contain extra text)
+        for name, key in CAT_MAP.items():
+            if key and name.lower() in label.lower():
+                return key
+        return label  # return raw if no match
+
     data = []
     skipped = 0
+    rls_values = set()
 
     for row in ds:
         prompt = row.get(text_field, '')
@@ -253,8 +284,16 @@ def process_aegis():
                 if mapped:
                     entry[mapped] = 1
 
+        # Divergence fields: prompt_label, response_label, response_label_source
+        entry['_pl'] = parse_label(row.get('prompt_label', ''))
+        entry['_rl'] = parse_label(row.get('response_label', ''))
+        rls = row.get('response_label_source', '')
+        entry['_rls'] = rls.strip() if rls else ''
+        rls_values.add(entry['_rls'])
+
         data.append(entry)
 
+    print(f'  Label source values: {sorted(rls_values)}')
     print(f'  Final: {len(data)} rows ({skipped} skipped)')
     write_json_and_js('aegis', data)
 
@@ -310,7 +349,12 @@ def process_jigsaw():
 
 
 def process_saferlhf():
-    """Download and normalize PKU-SafeRLHF dataset."""
+    """Download and normalize PKU-SafeRLHF dataset.
+
+    Preserves per-response harm categories (_r0_XX, _r1_XX) alongside
+    merged categories (XX) for the Split Verdict divergence visualization.
+    Also preserves _safer and _better fields.
+    """
     print('Processing PKU-SafeRLHF dataset...')
     from datasets import load_dataset
 
@@ -320,11 +364,6 @@ def process_saferlhf():
 
     sample = ds[0]
     print(f'  Sample keys: {list(sample.keys())}')
-
-    # SafeRLHF has response_0_harm_category and response_1_harm_category dicts
-    # with 19 boolean keys each. We use response_0 categories (primary response).
-    # Each row is a prompt with two responses — we classify by the LESS safe response
-    # to capture the broadest category coverage per prompt.
 
     # 19 category mapping
     CAT_MAP = {
@@ -362,34 +401,42 @@ def process_saferlhf():
 
         prompt_clean = prompt.strip()
 
+        cat0 = row.get('response_0_harm_category', {})
+        cat1 = row.get('response_1_harm_category', {})
+
         # Deduplicate: same prompt can appear multiple times with different responses
         # Merge categories across all appearances (union of harm flags)
         prompt_hash = hash(prompt_clean)
         if prompt_hash in seen_prompts:
-            # Find existing entry and merge
             for existing in reversed(data):
                 if existing['prompt'] == prompt_clean:
-                    # OR the categories from both responses
-                    cat0 = row.get('response_0_harm_category', {})
-                    cat1 = row.get('response_1_harm_category', {})
                     for orig_key, short_key in CAT_MAP.items():
                         v0 = 1 if cat0.get(orig_key, False) else 0
                         v1 = 1 if cat1.get(orig_key, False) else 0
                         existing[short_key] = max(existing[short_key], v0, v1)
+                        # Also merge per-response fields (OR)
+                        existing['_r0_' + short_key] = max(existing.get('_r0_' + short_key, 0), v0)
+                        existing['_r1_' + short_key] = max(existing.get('_r1_' + short_key, 0), v1)
                     break
             continue
 
         seen_prompts.add(prompt_hash)
         entry = {'prompt': prompt_clean}
 
-        # Union of harm categories across both responses
-        cat0 = row.get('response_0_harm_category', {})
-        cat1 = row.get('response_1_harm_category', {})
-
+        # Merged categories (union across both responses — backward compatible)
         for orig_key, short_key in CAT_MAP.items():
             v0 = 1 if cat0.get(orig_key, False) else 0
             v1 = 1 if cat1.get(orig_key, False) else 0
             entry[short_key] = max(v0, v1)
+            # Per-response categories for divergence analysis
+            entry['_r0_' + short_key] = v0
+            entry['_r1_' + short_key] = v1
+
+        # Safer/better response IDs (0 or 1, or -1 if equal)
+        safer = row.get('safer_response_id', None)
+        better = row.get('better_response_id', None)
+        entry['_safer'] = safer if safer is not None else -1
+        entry['_better'] = better if better is not None else -1
 
         data.append(entry)
 
@@ -398,6 +445,192 @@ def process_saferlhf():
 
     print(f'  Final: {len(data)} rows ({skipped} skipped, deduped from {len(ds)})')
     write_json_and_js('saferlhf', data)
+
+
+def compute_stats():
+    """Compute aggregate statistics for all datasets and write into registry.json.
+
+    Reads each dataset JSON and the current registry.json. For each dataset,
+    computes: totalRows, categoryCounts, exclusivityRatios, avgExclusivity,
+    multiLabelRate. Writes updated registry.json + registry.js.
+    """
+    print('Computing dataset statistics...')
+
+    reg_path = os.path.join(DATASETS_DIR, 'registry.json')
+    with open(reg_path) as f:
+        registry = json.load(f)
+
+    for ds_entry in registry['datasets']:
+        ds_id = ds_entry['id']
+        json_path = os.path.join(DATASETS_DIR, f'{ds_id}.json')
+        if not os.path.exists(json_path):
+            print(f'  Skipping {ds_id} — {json_path} not found')
+            continue
+
+        print(f'  Loading {ds_id}...')
+        with open(json_path) as f:
+            data = json.load(f)
+
+        keys = [c['key'] for c in ds_entry['categories']]
+        total = len(data)
+        cat_counts = {k: 0 for k in keys}
+        exclusive_counts = {k: 0 for k in keys}
+        multi_label = 0
+
+        for row in data:
+            flagged = [k for k in keys if row.get(k, 0) == 1]
+            n_flagged = len(flagged)
+            if n_flagged > 1:
+                multi_label += 1
+            for k in flagged:
+                cat_counts[k] += 1
+                if n_flagged == 1:
+                    exclusive_counts[k] += 1
+
+        excl_ratios = {}
+        for k in keys:
+            if cat_counts[k] > 0:
+                excl_ratios[k] = round(exclusive_counts[k] / cat_counts[k], 3)
+            else:
+                excl_ratios[k] = 0.0
+
+        avg_excl = 0.0
+        cats_with_counts = [k for k in keys if cat_counts[k] > 0]
+        if cats_with_counts:
+            avg_excl = round(sum(excl_ratios[k] for k in cats_with_counts) / len(cats_with_counts), 3)
+
+        multi_rate = round(multi_label / total, 3) if total > 0 else 0.0
+
+        ds_entry['stats'] = {
+            'totalRows': total,
+            'categoryCounts': cat_counts,
+            'exclusivityRatios': excl_ratios,
+            'avgExclusivity': avg_excl,
+            'multiLabelRate': multi_rate
+        }
+
+        print(f'    {ds_id}: {total} rows, avg excl={avg_excl}, multi-label={multi_rate}')
+
+    # Write updated registry
+    with open(reg_path, 'w') as f:
+        json.dump(registry, f, indent=2)
+
+    js_path = os.path.join(DATASETS_DIR, 'registry.js')
+    with open(js_path, 'w') as f:
+        f.write('var datasetRegistry = ')
+        json.dump(registry, f, indent=2)
+        f.write(';\n')
+
+    print('  Done: stats written to registry.json')
+
+
+def build_xref():
+    """Build cross-dataset prompt matching index.
+
+    Loads all dataset JSONs, normalizes prompts, finds duplicates across
+    datasets, outputs xref.json + xref.js with entries that appear in 2+ datasets.
+    """
+    print('Building cross-dataset prompt index (xref)...')
+
+    reg_path = os.path.join(DATASETS_DIR, 'registry.json')
+    with open(reg_path) as f:
+        registry = json.load(f)
+
+    def normalize_prompt(text):
+        """Normalize for matching: lowercase, strip, collapse whitespace."""
+        import re
+        t = text.strip().lower()
+        t = re.sub(r'\s+', ' ', t)
+        return t
+
+    # prompt_norm -> list of {dataset, cats: [keys]}
+    prompt_index = {}
+
+    for ds_entry in registry['datasets']:
+        ds_id = ds_entry['id']
+        json_path = os.path.join(DATASETS_DIR, f'{ds_id}.json')
+        if not os.path.exists(json_path):
+            print(f'  Skipping {ds_id} — not found')
+            continue
+
+        text_field = ds_entry.get('textField', 'prompt')
+        keys = [c['key'] for c in ds_entry['categories']]
+
+        print(f'  Loading {ds_id} ({json_path})...')
+        with open(json_path) as f:
+            data = json.load(f)
+
+        for row in data:
+            text = row.get(text_field, '')
+            if not text:
+                continue
+            norm = normalize_prompt(text)
+            flagged = [k for k in keys if row.get(k, 0) == 1]
+            if not flagged:
+                continue  # only index rows with at least one flag
+
+            if norm not in prompt_index:
+                prompt_index[norm] = []
+
+            # Check if we already have an entry from this dataset
+            existing = None
+            for entry in prompt_index[norm]:
+                if entry['dataset'] == ds_id:
+                    existing = entry
+                    break
+
+            if existing:
+                # Merge categories (union)
+                for k in flagged:
+                    if k not in existing['cats']:
+                        existing['cats'].append(k)
+            else:
+                prompt_index[norm].append({
+                    'dataset': ds_id,
+                    'cats': flagged
+                })
+
+    # Filter to prompts appearing in 2+ datasets
+    xref = []
+    for norm, matches in prompt_index.items():
+        datasets_seen = set(m['dataset'] for m in matches)
+        if len(datasets_seen) >= 2:
+            # Find one original prompt text (from first match)
+            xref.append({
+                'prompt': norm,  # normalized form
+                'matches': matches
+            })
+
+    # Sort by number of datasets descending, then alphabetically
+    xref.sort(key=lambda x: (-len(set(m['dataset'] for m in x['matches'])), x['prompt']))
+
+    print(f'  Found {len(xref)} prompts in 2+ datasets')
+    if xref:
+        ds_pairs = {}
+        for entry in xref:
+            ds_set = tuple(sorted(set(m['dataset'] for m in entry['matches'])))
+            ds_pairs[ds_set] = ds_pairs.get(ds_set, 0) + 1
+        for pair, count in sorted(ds_pairs.items(), key=lambda x: -x[1]):
+            print(f'    {" + ".join(pair)}: {count} shared prompts')
+
+    # Write xref.json and xref.js
+    json_path = os.path.join(DATASETS_DIR, 'xref.json')
+    js_path = os.path.join(DATASETS_DIR, 'xref.js')
+
+    print(f'  Writing {json_path} ({len(xref)} entries)...')
+    with open(json_path, 'w') as f:
+        json.dump(xref, f, separators=(',', ':'))
+
+    size_mb = os.path.getsize(json_path) / (1024 * 1024)
+    print(f'  JSON size: {size_mb:.1f} MB')
+
+    print(f'  Writing {js_path}...')
+    with open(js_path, 'w') as f:
+        f.write('var dataset_xref = ')
+        json.dump(xref, f, separators=(',', ':'))
+        f.write(';\n')
+
+    print(f'  Done: xref ({len(xref)} cross-dataset matches)')
 
 
 def generate_registry():
@@ -678,6 +911,10 @@ def main():
         process_saferlhf()
     elif cmd == 'registry':
         generate_registry()
+    elif cmd == 'stats':
+        compute_stats()
+    elif cmd == 'xref':
+        build_xref()
     elif cmd == 'all':
         generate_registry()
         process_openai()
@@ -685,6 +922,8 @@ def main():
         process_beavertails()
         process_saferlhf()
         process_aegis()
+        compute_stats()
+        build_xref()
     else:
         print(f'Unknown command: {cmd}')
         print(__doc__)
