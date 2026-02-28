@@ -1,0 +1,12 @@
+{
+  "name": "where-the-lines-are",
+  "private": true,
+  "scripts": {
+    "test": "node --test 'tests/unit/*.test.js'",
+    "test:browser": "npx playwright test tests/browser/",
+    "serve": "python3 -m http.server 8765"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2"
+  }
+}
