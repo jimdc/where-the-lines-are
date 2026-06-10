@@ -26,13 +26,20 @@
   <p class="hint">The taxonomy grew from 6 categories (2018) through 23-category safety suites (2024) to frontier CBRN deployment classifiers (2025–26). Bold = first appearance. The amber-badged column is taxonomy-only — a published category list with no public corpus.</p>
   <div class="timeline-scroll"><canvas id="timelineCanvas"></canvas></div>
   <h3>Exclusivity trend</h3>
-  <p class="hint">Dark bar = avg. category exclusivity. Light bar = multi-label rate. Higher exclusivity = categories more often flagged alone.</p>
+  <p class="hint">Dark bar = avg. category exclusivity. Light bar = multi-label rate. Higher exclusivity = categories more often flagged alone. The jump to 100% exclusivity in the 2024–26 columns is a genre shift, not a labeling trend: the field moved from labeling found content (multi-label corpora) to authoring benchmark suites that assign exactly one category per prompt.</p>
   <canvas id="exclusivityTrendCanvas"></canvas>
+</div>
+
+<div id="wmdpSection">
+  <h2>Beyond labeling — WMDP</h2>
+  <p class="hint">Every column above is a <em>labeling</em> taxonomy — it sorts prompts into harm categories. <strong>WMDP</strong> (Weapons of Mass Destruction Proxy) measures something different: whether a model <em>knows</em> hazardous facts, via 3,668 multiple-choice questions across three security domains. It is a capabilities benchmark, not a moderation taxonomy, so it sits on its own here rather than as a Rosetta column. No question content is shown — these are hazardous-knowledge items (questions with correct answers), so the panel renders only structure and counts.</p>
+  <canvas id="wmdpCanvas"></canvas>
+  <p class="hint">Source: <a href="https://arxiv.org/abs/2403.03218" target="_blank" rel="noopener">CAIS, 2024 (arXiv 2403.03218)</a> · MIT license · 3,668 questions — biosecurity 1,273 · chemical 408 · cybersecurity 1,987.</p>
 </div>
 
 <div id="conceptComparisonSection">
   <h2>Concept comparison</h2>
-  <p class="hint">How the same concept manifests across datasets. Dark bar = % flagged. Light bar = exclusivity ratio.</p>
+  <p class="hint">How the same concept manifests across datasets. Dark bar = % flagged. Light bar = exclusivity ratio. Single-label benchmarks (AIR-Bench, HarmBench, AILuminate) always show 100% exclusivity by construction.</p>
   <select id="conceptSelector" style="font-family:system-ui,-apple-system,sans-serif;font-size:0.9em;margin-bottom:0.5rem;padding:0.2rem 0.4rem;border:1px solid #ccc;border-radius:2px;"></select>
   <canvas id="conceptComparisonCanvas"></canvas>
   <p id="conceptDetail" class="muted" style="font-size:0.82em;margin-top:0.25rem;"></p>
@@ -58,6 +65,7 @@
 
 <h2>Category exclusivity</h2>
 <p class="hint">Dark = flagged for this category alone. Light = shared with other categories.</p>
+<p id="singleLabelNoteExclusivity" class="single-label-note" style="display:none;"></p>
 <div id="exclusivitySection"><canvas id="exclusivityCanvas"></canvas></div>
 
 <div id="splitVerdictSection" style="display:none;">
@@ -77,12 +85,14 @@
 
 <h2>Pairwise co-occurrences</h2>
 <p class="hint">Darker cells = more prompts flagged for both categories. Click any cell to filter.</p>
+<p id="singleLabelNoteCooccurrence" class="single-label-note" style="display:none;"></p>
 <div id="cooccurrenceSection">
   <canvas id="cooccurrenceCanvas"></canvas>
 </div>
 
 <h3>Network view</h3>
 <p class="hint">Force-directed layout. Node size = frequency. Edge darkness = co-occurrence strength. Only above-median edges shown.</p>
+<p id="singleLabelNoteNetwork" class="single-label-note" style="display:none;"></p>
 <div id="networkSection">
   <canvas id="networkCanvas"></canvas>
 </div>
@@ -142,6 +152,7 @@
 </div>
 
 <h2>Category combination frequencies</h2>
+<p id="singleLabelNoteCombo" class="single-label-note" style="display:none;"></p>
 <div id="comboSection">
   <canvas id="comboCanvas"></canvas>
 </div>
@@ -345,16 +356,24 @@ function renderDatasetSelector(activeId) {
     if (!registry || !registry.datasets) return;
 
     // Taxonomy-only entries (deployment classifiers with no row-level corpus) are
-    // not selectable here — they have no prompts to explore. They appear in the
-    // Rosetta Stone and Drift timeline only.
-    registry.datasets.filter(function(ds) { return !ds.taxonomyOnly; }).forEach(function(ds) {
+    // not selectable — they have no prompts to explore and live in the Rosetta
+    // Stone and Drift timeline. They render greyed-out so the layer is visible here.
+    registry.datasets.forEach(function(ds) {
         var panel = document.createElement('div');
-        panel.className = 'dataset-panel' + (ds.id === activeId ? ' dataset-panel-active' : '');
+        panel.className = 'dataset-panel' + (ds.id === activeId ? ' dataset-panel-active' : '')
+            + (ds.taxonomyOnly ? ' dataset-panel-disabled' : '');
         panel.dataset.id = ds.id;
 
         var name = document.createElement('div');
         name.className = 'dataset-panel-name';
         name.textContent = ds.name;
+        if (ds.taxonomyOnly) {
+            var badge = document.createElement('span');
+            badge.className = 'taxonomy-badge';
+            badge.textContent = 'taxonomy only';
+            name.appendChild(document.createTextNode(' '));
+            name.appendChild(badge);
+        }
         panel.appendChild(name);
 
         var meta = document.createElement('div');
@@ -364,14 +383,21 @@ function renderDatasetSelector(activeId) {
 
         var license = document.createElement('div');
         license.className = 'dataset-panel-license';
-        license.textContent = ds.license;
+        license.textContent = ds.taxonomyOnly
+            ? 'no public corpus \u2014 see Rosetta & Drift'
+            : ds.license;
         panel.appendChild(license);
 
-        panel.addEventListener('click', function() {
-            if (ds.id !== activeId) {
-                switchDataset(ds.id);
-            }
-        });
+        if (ds.taxonomyOnly) {
+            panel.title = 'Published category list with no public row-level corpus \u2014 '
+                + 'nothing to explore here. Shown in the Rosetta crosswalk and Drift timeline below.';
+        } else {
+            panel.addEventListener('click', function() {
+                if (ds.id !== activeId) {
+                    switchDataset(ds.id);
+                }
+            });
+        }
 
         container.appendChild(panel);
     });
@@ -1298,6 +1324,24 @@ function generateSubset(event) {
     updateVisualizations(subset);
 }
 
+/* ── Single-label structural notes ──
+   The 2024–26 benchmark suites (AIR-Bench, HarmBench, AILuminate) assign
+   exactly one category per prompt, so overlap-based charts are degenerate
+   by construction. Say so, instead of rendering silence. */
+function updateSingleLabelNotes(entry, singleLabel) {
+    var notes = {
+        singleLabelNoteExclusivity: entry.name + ' is single-label by construction — every prompt carries exactly one category, so every bar below is 100% exclusive. A property of the benchmark’s design, not a finding.',
+        singleLabelNoteCooccurrence: 'No co-occurrence to display: ' + entry.name + ' assigns exactly one category per prompt, so every off-diagonal cell is structurally zero.',
+        singleLabelNoteNetwork: 'Nodes only, no edges: in a single-label dataset no two categories ever share a prompt. Node size (frequency) is the only signal here.',
+        singleLabelNoteCombo: 'Single-label dataset: the only “combinations” are single categories. Switch to a multi-label corpus (e.g. Jigsaw or SafeRLHF) to see real combination structure.'
+    };
+    Object.keys(notes).forEach(function(id) {
+        var el = document.getElementById(id);
+        el.textContent = singleLabel ? notes[id] : '';
+        el.style.display = singleLabel ? '' : 'none';
+    });
+}
+
 /* ── Dataset Switching ── */
 function switchDataset(id) {
     var entry = registry.datasets.find(function(d) { return d.id === id; });
@@ -1326,6 +1370,9 @@ function switchDataset(id) {
         buildDynamicStopWords(data);
         window.SUGGESTIONS = buildSuggestions(countPairwise(data, KEYS));
         window.COMBO_FREQS = countCombinations(data, KEYS);
+
+        // Structural notes for single-label benchmark suites
+        updateSingleLabelNotes(entry, isSingleLabel(data, KEYS));
 
         // Dataset summary paragraph
         updateSummaryParagraph(entry, data);
@@ -1510,6 +1557,7 @@ Promise.all([loadRegistry(), loadXref(), loadFuzzyXref()]).then(function(results
     renderTaxonomyAlignment(document.getElementById('rosettaTable'), reg);
     drawTaxonomyTimeline(document.getElementById('timelineCanvas'), reg);
     drawExclusivityTrend(document.getElementById('exclusivityTrendCanvas'), reg);
+    renderWmdpPanel(document.getElementById('wmdpCanvas'));
     buildConceptSelector(reg);
 
     // Determine initial dataset from URL hash

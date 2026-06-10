@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ew-cache-v7';
+const CACHE_NAME = 'ew-cache-v10';
 const URLS_TO_CACHE = [
   './',
   './index.html',
@@ -10,6 +10,7 @@ const URLS_TO_CACHE = [
   './datasets/openai.json',
   './datasets/airbench.json',
   './datasets/ailuminate.json',
+  './datasets/harmbench.json',
   './static/styles.css',
   './static/vis.js',
   './manifest.json',
@@ -19,8 +20,8 @@ const URLS_TO_CACHE = [
 
 // Note: beavertails.json (~51MB), saferlhf.json (~26MB), and aegis.json (~14MB) are NOT pre-cached.
 // They are cached on first access via the fetch handler's cache-on-fetch strategy.
-// AIR-Bench (~5MB) and AILuminate (~0.3MB) ARE pre-cached — they are the small,
-// frontier-taxonomy datasets and benefit from offline-first parity.
+// AIR-Bench (~5MB), AILuminate (~0.3MB), and HarmBench (~0.1MB) ARE pre-cached —
+// they are the small, frontier-taxonomy datasets and benefit from offline-first parity.
 
 self.addEventListener('install', event => {
   event.waitUntil(

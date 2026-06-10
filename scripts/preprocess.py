@@ -68,6 +68,28 @@ AILUMINATE_DEMO_CSV = (
     'airr_official_1.0_demo_en_us_prompt_set_release.csv'
 )
 
+# HarmBench (CAIS, arXiv 2402.04249) automated-red-teaming behavior set. The
+# public text "all" split is 400 behaviors, each labeled with exactly one of seven
+# SemanticCategory values (single-label, like AIR-Bench/AILuminate). Distributed on
+# GitHub under MIT; we download the raw CSV over plain HTTP (no HF lib). Behaviors
+# are elicitation prompts (requests), not weapon recipes. Its 'chemical_biological'
+# category is HarmBench's slice of the CBRN/biosecurity axis.
+HARMBENCH_SEM_TO_KEY = {
+    'chemical_biological': 'CB',
+    'cybercrime_intrusion': 'CY',
+    'illegal': 'IL',
+    'misinformation_disinformation': 'MD',
+    'harassment_bullying': 'HB',
+    'copyright': 'CP',
+    'harmful': 'HM',
+}
+# CB first to foreground the CBRN contribution; rest roughly by breadth.
+HARMBENCH_KEYS = ['CB', 'CY', 'IL', 'MD', 'HB', 'CP', 'HM']
+HARMBENCH_CSV = (
+    'https://raw.githubusercontent.com/centerforaisafety/HarmBench/main/'
+    'data/behavior_datasets/harmbench_behaviors_text_all.csv'
+)
+
 
 def ensure_datasets_dir():
     os.makedirs(DATASETS_DIR, exist_ok=True)
@@ -612,6 +634,56 @@ def process_ailuminate():
         print(f'  WARNING: categories with zero rows: {zero}')
     print(f'  CBRNE (IW) count: {counts["IW"]}')
     write_json_and_js('ailuminate', rows)
+
+
+def process_harmbench():
+    """Download and normalize the HarmBench text behavior set (CAIS, 2024).
+
+    The public text "all" split is 400 automated-red-teaming behaviors (harmful
+    instructions used to test attack/refusal robustness), each labeled with exactly
+    one of seven SemanticCategory values. We emit a flat {prompt, <7 keys>: 0|1} row
+    with a single key set — single-label by construction, like AIR-Bench and
+    AILuminate. Full behavior text is kept (already public on GitHub under MIT).
+    Behaviors are elicitation prompts (requests), not weapon recipes. The
+    'chemical_biological' category is HarmBench's slice of the CBRN/biosecurity axis.
+    The contextual behaviors' ContextString is intentionally dropped — we display the
+    behavior instruction itself.
+    """
+    import csv
+    import io
+    import urllib.request
+
+    print('Processing HarmBench text behavior set...')
+    print(f'  Downloading {HARMBENCH_CSV} ...')
+    with urllib.request.urlopen(HARMBENCH_CSV) as resp:
+        text = resp.read().decode('utf-8')
+
+    reader = csv.DictReader(io.StringIO(text))
+    rows = []
+    unknown = {}
+    skipped_empty = 0
+    for r in reader:
+        prompt = (r.get('Behavior') or '').strip()
+        if not prompt:
+            skipped_empty += 1
+            continue
+        sem = (r.get('SemanticCategory') or '').strip()
+        key = HARMBENCH_SEM_TO_KEY.get(sem)
+        if key is None:
+            unknown[sem] = unknown.get(sem, 0) + 1
+            key = 'HM'  # fold any unmapped category into general harm
+        entry = {'prompt': prompt}
+        for k in HARMBENCH_KEYS:
+            entry[k] = 1 if k == key else 0
+        rows.append(entry)
+
+    if unknown:
+        print(f'  WARNING: unmapped SemanticCategory folded into HM: {unknown}')
+    counts = {k: sum(row[k] for row in rows) for k in HARMBENCH_KEYS}
+    print(f'  Final: {len(rows)} rows ({skipped_empty} empty prompts skipped)')
+    print(f'  Category counts: {counts}')
+    print(f'  chemical_biological (CB) count: {counts["CB"]}')
+    write_json_and_js('harmbench', rows)
 
 
 def compute_stats():
@@ -1301,6 +1373,41 @@ def generate_registry():
                 ]
             },
             {
+                'id': 'harmbench',
+                'name': 'HarmBench',
+                'source': 'CAIS (2024)',
+                'license': 'MIT',
+                'paper': 'https://arxiv.org/abs/2402.04249',
+                'repo': 'https://github.com/centerforaisafety/HarmBench',
+                'file': 'datasets/harmbench.json',
+                'fileJs': 'datasets/harmbench.js',
+                'textField': 'prompt',
+                'note': 'Automated-red-teaming BEHAVIOR set (CAIS, Feb 2024): 400 harmful '
+                        'instructions used to test attack and refusal robustness, each labeled '
+                        'with exactly one of seven semantic categories. Single-label by '
+                        'construction (100% exclusivity, ~0% co-occurrence). Full behavior text '
+                        'is included (already public on GitHub, MIT). Behaviors are elicitation '
+                        'prompts — requests, not weapon recipes. Its “chemical_biological” '
+                        'category gives a third MEASURED column on the CBRN/biosecurity axis, '
+                        'alongside AIR-Bench and AILuminate.',
+                'categories': [
+                    {'key': 'CB', 'name': 'chemical & biological', 'short': 'chem/bio', 'concept': 'CBRN / biosecurity',
+                     'definition': 'Behaviors eliciting instructions or uplift for chemical or biological weapons and agents (HarmBench semantic category “chemical_biological”). HarmBench’s slice of the CBRN/biosecurity axis.'},
+                    {'key': 'CY', 'name': 'cybercrime & intrusion', 'short': 'cyber', 'concept': 'cyber',
+                     'definition': 'Behaviors eliciting hacking, malware, or unauthorized-intrusion assistance (HarmBench “cybercrime_intrusion”).'},
+                    {'key': 'IL', 'name': 'illegal activities', 'short': 'illegal', 'concept': ['substances', 'trafficking'],
+                     'definition': 'Behaviors eliciting general illegal activity — drugs, weapons, theft, smuggling (HarmBench “illegal”).'},
+                    {'key': 'MD', 'name': 'misinformation & disinformation', 'short': 'misinfo', 'concept': 'misinfo',
+                     'definition': 'Behaviors eliciting false or misleading content — propaganda, fabricated claims (HarmBench “misinformation_disinformation”).'},
+                    {'key': 'HB', 'name': 'harassment & bullying', 'short': 'harassment', 'concept': 'harassment',
+                     'definition': 'Behaviors eliciting harassment, bullying, or targeted abuse (HarmBench “harassment_bullying”).'},
+                    {'key': 'CP', 'name': 'copyright violations', 'short': 'copyright', 'concept': 'copyright',
+                     'definition': 'Behaviors eliciting verbatim reproduction of copyrighted text — song lyrics, book passages (HarmBench “copyright”).'},
+                    {'key': 'HM', 'name': 'general harm', 'short': 'harmful', 'concept': 'other',
+                     'definition': 'Behaviors causing other harms not covered by the six specific categories (HarmBench “harmful”).'}
+                ]
+            },
+            {
                 'id': 'ailuminate',
                 'name': 'MLCommons AILuminate v1.0',
                 'source': 'MLCommons (2025)',
@@ -1464,6 +1571,8 @@ def main():
         process_airbench()
     elif cmd == 'ailuminate':
         process_ailuminate()
+    elif cmd == 'harmbench':
+        process_harmbench()
     elif cmd == 'registry':
         generate_registry()
     elif cmd == 'stats':
@@ -1481,6 +1590,7 @@ def main():
         process_aegis()
         process_airbench()
         process_ailuminate()
+        process_harmbench()
         compute_stats()
         build_xref()
     else:

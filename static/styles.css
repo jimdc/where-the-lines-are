@@ -36,6 +36,19 @@ small, .small { font-size: 0.85em; }
 a { color: #333; text-decoration: underline; text-underline-offset: 2px; }
 a:hover { color: #000; }
 
+/* ── Single-label structural note (amber, matches taxonomy-only badge) ── */
+.single-label-note {
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 0.8em;
+    color: #9a6a00;
+    background: #fdf6e3;
+    border: 1px solid #e8d9a8;
+    border-radius: 3px;
+    padding: 0.45rem 0.6rem;
+    margin: 0 0 0.75rem;
+    max-width: 620px;
+}
+
 /* ── Hint text (instructional prompts between sections) ── */
 .hint {
     font-family: system-ui, -apple-system, sans-serif;
@@ -75,6 +88,19 @@ a:hover { color: #000; }
 .dataset-panel-active:hover {
     border-left-color: #333;
 }
+.dataset-panel-disabled {
+    cursor: default;
+    border-style: dashed;
+    border-left-style: solid;
+    background: #fcfcfc;
+}
+.dataset-panel-disabled:hover {
+    border-color: #ddd;
+    border-left-color: #ddd;
+    background: #fcfcfc;
+}
+.dataset-panel-disabled .dataset-panel-name { color: #888; }
+.dataset-panel-disabled .dataset-panel-meta { color: #999; }
 .dataset-panel-name {
     font-family: system-ui, -apple-system, sans-serif;
     font-size: 0.9em;

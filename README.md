@@ -10,7 +10,7 @@ The interface follows Edward Tufte's principles from *The Visual Display of Quan
 
 ## Datasets
 
-Seven labeled datasets ship with the tool, spanning 2018–2025, plus one taxonomy-only deployment-classifier layer (2025–26) — tracing the arc from comment-section toxicity detection through the current frontier paradigm where classifiers intercept model **outputs** on a CBRN/biosecurity axis:
+Eight labeled datasets ship with the tool, spanning 2018–2025, plus one taxonomy-only deployment-classifier layer (2025–26) — tracing the arc from comment-section toxicity detection through the current frontier paradigm where classifiers intercept model **outputs** on a CBRN/biosecurity axis:
 
 | Dataset | Source | Year | Rows | Categories | License |
 |---------|--------|------|------|-----------|---------|
@@ -20,18 +20,20 @@ Seven labeled datasets ship with the tool, spanning 2018–2025, plus one taxono
 | **PKU-SafeRLHF** | [PKU-Alignment](https://huggingface.co/datasets/PKU-Alignment/PKU-SafeRLHF) | 2024 | 38,640 | 19 | CC-BY-NC-4.0 |
 | **NVIDIA Aegis v2** | [NVIDIA](https://huggingface.co/datasets/nvidia/Aegis-AI-Content-Safety-Dataset-2.0) | 2024 | 29,095 | 23 | CC-BY-4.0 |
 | **AIR-Bench 2024** | [Stanford CRFM](https://huggingface.co/datasets/stanford-crfm/air-bench-2024) ([arXiv 2407.17436](https://arxiv.org/abs/2407.17436)) | 2024 | 5,694 | 16 | CC-BY-4.0 |
+| **HarmBench** | [CAIS](https://github.com/centerforaisafety/HarmBench) ([arXiv 2402.04249](https://arxiv.org/abs/2402.04249)) | 2024 | 400 | 7 | MIT |
 | **MLCommons AILuminate v1.0** | [MLCommons](https://github.com/mlcommons/ailuminate) ([arXiv 2503.05731](https://arxiv.org/abs/2503.05731)) | 2025 | 1,200 | 12 | CC-BY-4.0 |
 | **Anthropic Constitutional Classifiers** *(taxonomy only)* | [Anthropic](https://www.anthropic.com/research/constitutional-classifiers) ([arXiv 2501.18837](https://arxiv.org/abs/2501.18837)) | 2025–26 | — | 4 (CBRN) | N/A |
 
-The first seven share the same multi-label binary structure (each row has one or more flagged categories) but slice content moderation differently. Jigsaw uses 6 behavioral categories (toxic, obscene, insult, threat) from Wikipedia comments — the pre-AI-safety worldview. OpenAI introduced hierarchical severity (hate → hate/threatening). BeaverTails added financial crime, terrorism, and privacy. SafeRLHF expanded to 19 categories including cybercrime, mental manipulation, and environmental damage. Aegis reached 23 with profanity, malware, and unauthorized advice. The taxonomy evolution is the story — click a dataset panel at the top to switch; all visualizations rebuild from scratch.
+The first eight share the same multi-label binary structure (each row has one or more flagged categories) but slice content moderation differently. Jigsaw uses 6 behavioral categories (toxic, obscene, insult, threat) from Wikipedia comments — the pre-AI-safety worldview. OpenAI introduced hierarchical severity (hate → hate/threatening). BeaverTails added financial crime, terrorism, and privacy. SafeRLHF expanded to 19 categories including cybercrime, mental manipulation, and environmental damage. Aegis reached 23 with profanity, malware, and unauthorized advice. The taxonomy evolution is the story — click a dataset panel at the top to switch; all visualizations rebuild from scratch.
 
 ### The deployment-classifier era (2025–26)
 
 Across the first five datasets — 70 categories in total — there is **no biology or CBRN category at all**. Yet that is precisely the axis frontier labs now draw lines on in production: real-time classifiers that read model **outputs** and block chemical, biological, radiological, and nuclear (CBRN) uplift. The 2024–26 layer closes that gap:
 
 - **AIR-Bench 2024** (Stanford CRFM) is a policy-derived taxonomy — 5,694 prompts distilled from 8 government regulations and 16 company policies into a 4-level tree (4 → 16 → 45 → 314). Rolled up to its 16 Level-2 categories, it is the first labeled dataset here whose taxonomy reaches **Weapon Usage & Development** (bioweapons, chemical, nuclear, radiological) and a dedicated cyber/**Security Risks** axis. It is single-label at the leaf, so its co-occurrence is near-diagonal by design — its contribution is taxonomic breadth, not co-activation structure.
+- **HarmBench** (CAIS, Feb 2024) is an automated-red-teaming **behavior set** — 400 harmful instructions used to measure attack success and refusal robustness, each labeled with exactly one of seven semantic categories. Its **chemical & biological** category (56 behaviors) gives a third *measured* column on the CBRN/biosecurity axis. Single-label by construction (100% exclusivity, ~0% co-occurrence), and the behaviors are elicitation prompts — requests, not recipes — so the full text ships (MIT, already public on GitHub).
 - **MLCommons AILuminate v1.0** ships a public 1,200-prompt DEMO set (a 10% practice subset, CC-BY-4.0) labeled across the 12-hazard AIRR taxonomy — including a dedicated, *measured* **Indiscriminate Weapons (CBRNE)** hazard (100 prompts).
-- **Anthropic Constitutional Classifiers** is a *taxonomy-only* layer: a real frontier deployment classifier whose CBRN categories (chemical, biological, radiological, nuclear) are published, but whose row-level corpus is **not** public. It is rendered as a labeled column in the Rosetta crosswalk and Drift timeline, badged "taxonomy only," and carries **no counts, co-occurrence, or statistics** — the honest representation of a category list with no measurable data behind it (see *Measured vs. taxonomy-only*, below).
+- **Anthropic Constitutional Classifiers** is a *taxonomy-only* layer: a real frontier deployment classifier whose CBRN categories (chemical, biological, radiological, nuclear) are published, but whose row-level corpus is **not** public. It is rendered as a labeled column in the Rosetta crosswalk and Drift timeline, badged "taxonomy only," appears greyed-out (non-selectable) in the dataset picker, and carries **no counts, co-occurrence, or statistics** — the honest representation of a category list with no measurable data behind it (see *Measured vs. taxonomy-only*, below).
 
 ## What can you discover?
 
@@ -47,9 +49,11 @@ Moderation categories are not independent. The visualizations expose their hidde
 
 **The binary matrix shows population structure.** Each row of data becomes a thin strip of dark and light cells. Vertical dark bands show which categories dominate; horizontal patterns reveal clusters; scattered dark cells mark outliers. BeaverTails renders 300K rows at full density.
 
-**Cross-dataset comparison reveals taxonomy design choices.** The Rosetta Stone table maps ~20 harm concepts across all eight taxonomies, showing how "privacy" becomes "PII/privacy" in Aegis, or how "minors" is split from "sexual" in some taxonomies but merged in others. The new **CBRN / biosecurity** row stays empty (—) across all five legacy datasets and only fills in for AIR-Bench, AILuminate, and the Anthropic deployment classifier — making the arrival of the bio axis visible at a glance. The Drift timeline shows this evolution chronologically — bold entries mark concepts appearing for the first time.
+**Cross-dataset comparison reveals taxonomy design choices.** The Rosetta Stone table maps ~20 harm concepts across all nine taxonomies, showing how "privacy" becomes "PII/privacy" in Aegis, or how "minors" is split from "sexual" in some taxonomies but merged in others. The new **CBRN / biosecurity** row stays empty (—) across all five legacy datasets and only fills in for AIR-Bench, HarmBench, AILuminate, and the Anthropic deployment classifier — making the arrival of the bio axis visible at a glance. The Drift timeline shows this evolution chronologically — bold entries mark concepts appearing for the first time.
 
 **Measured vs. taxonomy-only.** The tool draws a hard line between datasets with a real labeled corpus (which get counts, co-occurrence, exclusivity, and every other statistic) and *taxonomy-only* layers — published category lists with no public row data. Taxonomy-only entries appear only in the Rosetta crosswalk and Drift timeline, are badged in amber, and have **no** statistics computed or shown. Absence of row data is rendered as absence, never inflated into false density.
+
+**Beyond labeling — WMDP.** A standalone panel below the Drift timeline contrasts the *labeling* taxonomies above with a *capabilities* benchmark: [WMDP](https://arxiv.org/abs/2403.03218) (Weapons of Mass Destruction Proxy, CAIS 2024, MIT), 3,668 multiple-choice questions measuring whether a model **knows** hazardous facts across biosecurity (1,273), chemical security (408), and cybersecurity (1,987). It is not a moderation taxonomy, so it never appears as a Rosetta column; and because its items are questions *with answers* — recipe-shaped, not request-shaped — the panel renders only domain counts, never the question content. It is the eval-side counterpoint to the deployment-classifier taxonomies: "what a model knows" versus "how prompts are labeled."
 
 **Annotators disagree more than you'd expect.** The Split Verdict chart (SafeRLHF) shows that two independently classified responses disagree 8% of the time on privacy, but only 1% on trafficking. The safer response is not the better one 24% of the time. For Aegis, human labels agree perfectly while LLM jury labels diverge 36% between prompt and response safety.
 
@@ -83,6 +87,7 @@ datasets/
   aegis.json            29,095 rows (14 MB, includes divergence fields)
   airbench.json         5,694 rows (5 MB, AIR-Bench 2024 L2 rollup)
   ailuminate.json       1,200 rows (0.3 MB, AILuminate v1.0 DEMO)
+  harmbench.json        400 rows (0.1 MB, HarmBench behaviors, single-label)
   *.js                  JS wrappers for file:// protocol
                         (Anthropic Constitutional Classifiers is taxonomy-only —
                          it lives in registry.json with rows:null, no data file.)
@@ -91,6 +96,6 @@ scripts/
 tests/
   unit/                 Pure-function unit tests (node --test)
   data/                 Independent data-validation for AIR-Bench, AILuminate,
-                        and the taxonomy-only integrity invariants
+                        HarmBench, and the taxonomy-only integrity invariants
   browser/              Playwright smoke tests
 ```

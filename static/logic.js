@@ -244,6 +244,19 @@ function countExclusivity(data, keys) {
     return { exclusive: exclusive, shared: shared };
 }
 
+/* True when no row carries more than one category — single-label by
+   construction (2024–26 benchmark suites), so co-occurrence is
+   structurally zero rather than empirically low. */
+function isSingleLabel(data, keys) {
+    for (var i = 0; i < data.length; i++) {
+        var row = data[i], n = 0;
+        for (var j = 0; j < keys.length; j++) {
+            if (row[keys[j]] === 1 && ++n > 1) return false;
+        }
+    }
+    return true;
+}
+
 /* ── Surprise metric helpers ── */
 function getComboKey(row, keys) {
     var flagged = keys.filter(function(k) { return row[k] === 1; }).sort();
@@ -286,6 +299,7 @@ if (typeof module !== 'undefined' && module.exports) {
         countPairwise: countPairwise,
         countCombinations: countCombinations,
         countExclusivity: countExclusivity,
+        isSingleLabel: isSingleLabel,
         getComboKey: getComboKey,
         computeSurpriseScore: computeSurpriseScore,
         computeCohensKappa: computeCohensKappa

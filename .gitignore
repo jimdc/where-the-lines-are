@@ -169,3 +169,6 @@ test-results/
 CLAUDE.md
 tasks/
 .claude/
+
+# Playwright MCP session artifacts (screenshots/snapshots/console logs)
+.playwright-mcp/

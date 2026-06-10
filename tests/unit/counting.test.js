@@ -88,3 +88,35 @@ describe('countExclusivity', function() {
         assert.equal(result.shared.A, 0);
     });
 });
+
+describe('isSingleLabel', function() {
+    var isSingleLabel = require('../../static/logic.js').isSingleLabel;
+
+    it('is false for multi-label data', function() {
+        assert.equal(isSingleLabel(SAMPLE_DATA, SAMPLE_KEYS), false);
+    });
+
+    it('is true when every row has exactly one category', function() {
+        var rows = [{ A: 1, B: 0 }, { A: 0, B: 1 }, { B: 1 }];
+        assert.equal(isSingleLabel(rows, ['A', 'B']), true);
+    });
+
+    it('is true with zero-label rows mixed in (no row exceeds one)', function() {
+        var rows = [{ A: 1, B: 0 }, { A: 0, B: 0 }];
+        assert.equal(isSingleLabel(rows, ['A', 'B']), true);
+    });
+
+    it('is false as soon as one row carries two categories', function() {
+        var rows = [{ A: 1, B: 0 }, { A: 1, B: 1 }];
+        assert.equal(isSingleLabel(rows, ['A', 'B']), false);
+    });
+
+    it('is true for empty data', function() {
+        assert.equal(isSingleLabel([], ['A', 'B']), true);
+    });
+
+    it('ignores keys not in the key list', function() {
+        var rows = [{ A: 1, X: 1 }];
+        assert.equal(isSingleLabel(rows, ['A', 'B']), true);
+    });
+});

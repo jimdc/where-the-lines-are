@@ -944,6 +944,67 @@ function drawExclusivityTrend(canvas, registry) {
     });
 }
 
+/* ── 10b. WMDP hazardous-knowledge benchmark panel (counts only, no content) ── */
+
+// WMDP (Weapons of Mass Destruction Proxy, CAIS 2024, arXiv 2403.03218, MIT) is a
+// capabilities eval — multiple-choice questions WITH answers about hazardous
+// knowledge — not a labeling taxonomy. It lives in its own panel, never in the
+// Rosetta crosswalk, and we render only structure + counts (no question text), since
+// the items are answer-bearing hazardous-knowledge content, not mere request strings.
+var WMDP_META = {
+    domains: [
+        { name: 'Biosecurity', count: 1273 },
+        { name: 'Chemical security', count: 408 },
+        { name: 'Cybersecurity', count: 1987 }
+    ],
+    total: 3668
+};
+
+function renderWmdpPanel(canvas) {
+    if (!canvas) return;
+    var domains = WMDP_META.domains;
+    var maxCount = domains.reduce(function(m, d) { return Math.max(m, d.count); }, 0);
+
+    var rowHeight = 30;
+    var nameWidth = 140;
+    var barAreaWidth = 240;
+    var labelWidth = 90;
+    var totalWidth = nameWidth + barAreaWidth + labelWidth;
+    var totalHeight = domains.length * rowHeight + 4;
+
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = totalWidth * dpr;
+    canvas.height = totalHeight * dpr;
+    canvas.style.width = totalWidth + 'px';
+    canvas.style.height = totalHeight + 'px';
+
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, totalWidth, totalHeight);
+
+    domains.forEach(function(d, i) {
+        var y = i * rowHeight + rowHeight / 2 + 2;
+
+        // Domain name
+        ctx.fillStyle = '#333';
+        ctx.font = '11px system-ui, -apple-system, sans-serif';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(d.name, nameWidth - 8, y);
+
+        // Count bar (dark, scaled to the largest domain)
+        var barW = (d.count / maxCount) * (barAreaWidth - 10);
+        ctx.fillStyle = '#333';
+        ctx.fillRect(nameWidth, y - 5, barW, 10);
+
+        // Count label
+        ctx.fillStyle = '#666';
+        ctx.font = '10px system-ui, -apple-system, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(d.count.toLocaleString() + ' questions', nameWidth + barAreaWidth, y);
+    });
+}
+
 /* ── 11. Co-occurrence Network Graph (Force-Directed) ── */
 
 function drawCooccurrenceNetwork(canvas, pairCounts, singleCounts, keys, namesFn) {

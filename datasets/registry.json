@@ -936,6 +936,95 @@
       }
     },
     {
+      "id": "harmbench",
+      "name": "HarmBench",
+      "source": "CAIS (2024)",
+      "license": "MIT",
+      "paper": "https://arxiv.org/abs/2402.04249",
+      "repo": "https://github.com/centerforaisafety/HarmBench",
+      "file": "datasets/harmbench.json",
+      "fileJs": "datasets/harmbench.js",
+      "textField": "prompt",
+      "note": "Automated-red-teaming BEHAVIOR set (CAIS, Feb 2024): 400 harmful instructions used to test attack and refusal robustness, each labeled with exactly one of seven semantic categories. Single-label by construction (100% exclusivity, ~0% co-occurrence). Full behavior text is included (already public on GitHub, MIT). Behaviors are elicitation prompts \u2014 requests, not weapon recipes. Its \u201cchemical_biological\u201d category gives a third MEASURED column on the CBRN/biosecurity axis, alongside AIR-Bench and AILuminate.",
+      "categories": [
+        {
+          "key": "CB",
+          "name": "chemical & biological",
+          "short": "chem/bio",
+          "concept": "CBRN / biosecurity",
+          "definition": "Behaviors eliciting instructions or uplift for chemical or biological weapons and agents (HarmBench semantic category \u201cchemical_biological\u201d). HarmBench\u2019s slice of the CBRN/biosecurity axis."
+        },
+        {
+          "key": "CY",
+          "name": "cybercrime & intrusion",
+          "short": "cyber",
+          "concept": "cyber",
+          "definition": "Behaviors eliciting hacking, malware, or unauthorized-intrusion assistance (HarmBench \u201ccybercrime_intrusion\u201d)."
+        },
+        {
+          "key": "IL",
+          "name": "illegal activities",
+          "short": "illegal",
+          "concept": [
+            "substances",
+            "trafficking"
+          ],
+          "definition": "Behaviors eliciting general illegal activity \u2014 drugs, weapons, theft, smuggling (HarmBench \u201cillegal\u201d)."
+        },
+        {
+          "key": "MD",
+          "name": "misinformation & disinformation",
+          "short": "misinfo",
+          "concept": "misinfo",
+          "definition": "Behaviors eliciting false or misleading content \u2014 propaganda, fabricated claims (HarmBench \u201cmisinformation_disinformation\u201d)."
+        },
+        {
+          "key": "HB",
+          "name": "harassment & bullying",
+          "short": "harassment",
+          "concept": "harassment",
+          "definition": "Behaviors eliciting harassment, bullying, or targeted abuse (HarmBench \u201charassment_bullying\u201d)."
+        },
+        {
+          "key": "CP",
+          "name": "copyright violations",
+          "short": "copyright",
+          "concept": "copyright",
+          "definition": "Behaviors eliciting verbatim reproduction of copyrighted text \u2014 song lyrics, book passages (HarmBench \u201ccopyright\u201d)."
+        },
+        {
+          "key": "HM",
+          "name": "general harm",
+          "short": "harmful",
+          "concept": "other",
+          "definition": "Behaviors causing other harms not covered by the six specific categories (HarmBench \u201charmful\u201d)."
+        }
+      ],
+      "stats": {
+        "totalRows": 400,
+        "categoryCounts": {
+          "CB": 56,
+          "CY": 67,
+          "IL": 65,
+          "MD": 65,
+          "HB": 25,
+          "CP": 100,
+          "HM": 22
+        },
+        "exclusivityRatios": {
+          "CB": 1.0,
+          "CY": 1.0,
+          "IL": 1.0,
+          "MD": 1.0,
+          "HB": 1.0,
+          "CP": 1.0,
+          "HM": 1.0
+        },
+        "avgExclusivity": 1.0,
+        "multiLabelRate": 0.0
+      }
+    },
+    {
       "id": "ailuminate",
       "name": "MLCommons AILuminate v1.0",
       "source": "MLCommons (2025)",
