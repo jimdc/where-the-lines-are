@@ -440,6 +440,23 @@ mark {
     color: #ccc;
     text-align: center;
 }
+.rosetta-ds-header-taxonomy {
+    color: #9a6a00;
+}
+.taxonomy-badge {
+    display: inline-block;
+    margin-top: 2px;
+    padding: 1px 5px;
+    font-size: 0.72em;
+    font-weight: 600;
+    font-style: normal;
+    color: #9a6a00;
+    background: #fdf6e3;
+    border: 1px solid #e8d9a8;
+    border-radius: 3px;
+    white-space: nowrap;
+}
+.timeline-scroll { overflow-x: auto; max-width: 100%; }
 
 #rosettaSection { margin: 1rem 0 0.5rem; }
 #driftSection { margin: 0.5rem 0 1rem; }

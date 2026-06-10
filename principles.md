@@ -301,6 +301,45 @@ disagree, label = percentage + shared count. The chart condenses thousands
 of cross-dataset comparisons into one readable display — data density
 (p. 168) applied to meta-analysis.
 
+## Measured vs. Taxonomy-Only: Graphical Integrity (pp. 53-77)
+
+The 2025–26 update adds frontier deployment classifiers whose category lists
+are published but whose row-level corpus is not. This creates a representational
+hazard Tufte names directly: the temptation to show data that does not exist.
+
+Tufte's principle of graphical integrity (p. 56) demands that "the representation
+of numbers, as physically measured on the surface of the graphic itself, should
+be directly proportional to the numerical quantities represented." A taxonomy-only
+classifier has *no* numerical quantities — no counts, no co-occurrence, no
+exclusivity. Rendering it with the same bars, matrices, and bitmaps as a measured
+dataset would manufacture density where there is none, the visual equivalent of a
+fabricated statistic.
+
+The encoding resolves this honestly:
+
+1. **Absence is rendered as absence.** Taxonomy-only layers appear *only* in the
+   two registry-level displays that show taxonomy structure rather than row
+   statistics — the Rosetta crosswalk and the Drift timeline. They never enter
+   the co-occurrence matrix, the exclusivity chart, the binary bitmap, or any
+   chart whose ink is proportional to row counts. The exclusivity trend already
+   filters on the presence of a `stats` block, so a corpus-less entry is excluded
+   by construction, not by special-casing.
+
+2. **A dedicated mark for "no measured data."** A single amber accent — the only
+   departure from the otherwise strict grayscale palette — is reserved exclusively
+   for the taxonomy-only badge. Color here is not decoration (which the rest of the
+   redesign forbids); it is the data, encoding the single most important fact about
+   the column: that nothing behind it was measured. This is a multifunctioning
+   element (p. 139) used with restraint — the badge text says "taxonomy only,"
+   and the color reinforces it.
+
+The CBRN / biosecurity concept row makes the payoff visible: it is empty (—)
+across all five legacy datasets and fills only for the three frontier layers.
+The blank cells are not missing data to be apologized for — they *are* the
+finding. Tufte (p. 53): good graphics "reveal the unexpected." The unexpected
+here is an entire harm axis that the field's labeled corpora did not name until
+deployment classifiers forced the question.
+
 ## Zero External Dependencies
 
 The redesign removes Chart.js (180KB), chartjs-chart-matrix (20KB),

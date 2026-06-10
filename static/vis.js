@@ -716,11 +716,28 @@ function renderTaxonomyAlignment(container, registry) {
     headerRow.appendChild(th0);
     datasets.forEach(function(ds) {
         var th = document.createElement('th');
-        th.textContent = ds.name.replace('Jigsaw Toxic Comments', 'Jigsaw')
+        var label = ds.name.replace('Jigsaw Toxic Comments', 'Jigsaw')
             .replace('OpenAI Moderation', 'OpenAI')
             .replace('PKU-SafeRLHF', 'SafeRLHF')
-            .replace('NVIDIA Aegis v2', 'Aegis');
+            .replace('NVIDIA Aegis v2', 'Aegis')
+            .replace('Anthropic Constitutional Classifiers', 'Anthropic\nclassifiers');
         th.className = 'rosetta-ds-header';
+        // Taxonomy-only layers (deployment classifiers, no public corpus) get a
+        // badge so they are never mistaken for measured, row-backed datasets.
+        if (ds.taxonomyOnly) {
+            th.classList.add('rosetta-ds-header-taxonomy');
+            label.split('\n').forEach(function(line, i) {
+                if (i > 0) th.appendChild(document.createElement('br'));
+                th.appendChild(document.createTextNode(line));
+            });
+            var badge = document.createElement('div');
+            badge.className = 'taxonomy-badge';
+            badge.textContent = 'taxonomy only';
+            badge.title = 'Published category list — no public row-level corpus. No counts or co-occurrence are computed.';
+            th.appendChild(badge);
+        } else {
+            th.textContent = label;
+        }
         headerRow.appendChild(th);
     });
     thead.appendChild(headerRow);
@@ -780,9 +797,12 @@ function drawTaxonomyTimeline(canvas, registry) {
             name: ds.name.replace('Jigsaw Toxic Comments', 'Jigsaw')
                 .replace('OpenAI Moderation', 'OpenAI')
                 .replace('PKU-SafeRLHF', 'SafeRLHF')
-                .replace('NVIDIA Aegis v2', 'Aegis'),
+                .replace('NVIDIA Aegis v2', 'Aegis')
+                .replace('MLCommons AILuminate v1.0', 'AILuminate')
+                .replace('Anthropic Constitutional Classifiers', 'Anthropic classif.'),
             source: ds.source,
             catCount: ds.categories.length,
+            taxonomyOnly: !!ds.taxonomyOnly,
             concepts: concepts
         };
     });
@@ -821,6 +841,14 @@ function drawTaxonomyTimeline(canvas, registry) {
         var yearMatch = ds.source.match(/\((\d{4})\)/);
         var year = yearMatch ? yearMatch[1] : '';
         ctx.fillText(year + ' \u00B7 ' + ds.catCount + ' categories', x, 20);
+
+        // Taxonomy-only badge: these columns are a published category list with no
+        // row-level corpus, so they carry no counts. Mark them unmistakably.
+        if (ds.taxonomyOnly) {
+            ctx.fillStyle = '#9a6a00';
+            ctx.font = 'bold 9px system-ui, -apple-system, sans-serif';
+            ctx.fillText('\u25CB taxonomy only \u2014 no corpus', x, 32);
+        }
 
         // Connector line
         ctx.strokeStyle = '#ddd';

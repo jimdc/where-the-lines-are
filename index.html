@@ -17,14 +17,14 @@
 
 <div id="rosettaSection">
   <h2>Rosetta stone</h2>
-  <p class="hint">How five taxonomies slice the same space. Each row is a concept; columns are datasets.</p>
+  <p class="hint">How eight taxonomies slice the same space — five legacy corpora, two frontier labeled datasets (AIR-Bench, AILuminate), and one taxonomy-only deployment classifier. Each row is a concept; columns are datasets.</p>
   <div id="rosettaTable" class="table-responsive"></div>
 </div>
 
 <div id="driftSection">
   <h2>Drift</h2>
-  <p class="hint">The taxonomy grew from 6 to 23 categories across 2018–2024. Bold = first appearance.</p>
-  <canvas id="timelineCanvas"></canvas>
+  <p class="hint">The taxonomy grew from 6 categories (2018) through 23-category safety suites (2024) to frontier CBRN deployment classifiers (2025–26). Bold = first appearance. The amber-badged column is taxonomy-only — a published category list with no public corpus.</p>
+  <div class="timeline-scroll"><canvas id="timelineCanvas"></canvas></div>
   <h3>Exclusivity trend</h3>
   <p class="hint">Dark bar = avg. category exclusivity. Light bar = multi-label rate. Higher exclusivity = categories more often flagged alone.</p>
   <canvas id="exclusivityTrendCanvas"></canvas>
@@ -344,7 +344,10 @@ function renderDatasetSelector(activeId) {
     container.innerHTML = '';
     if (!registry || !registry.datasets) return;
 
-    registry.datasets.forEach(function(ds) {
+    // Taxonomy-only entries (deployment classifiers with no row-level corpus) are
+    // not selectable here — they have no prompts to explore. They appear in the
+    // Rosetta Stone and Drift timeline only.
+    registry.datasets.filter(function(ds) { return !ds.taxonomyOnly; }).forEach(function(ds) {
         var panel = document.createElement('div');
         panel.className = 'dataset-panel' + (ds.id === activeId ? ' dataset-panel-active' : '');
         panel.dataset.id = ds.id;
@@ -753,9 +756,10 @@ function buildConceptSelector(reg) {
     if (!select || !reg || !reg.datasets) return;
     select.innerHTML = '';
 
-    // Build concept → {datasetId → [category names]}
+    // Build concept → {datasetId → [category names]}. Concept comparison reads
+    // row-level stats, so taxonomy-only entries (no corpus) are excluded here.
     var conceptMap = {};
-    reg.datasets.forEach(function(ds) {
+    reg.datasets.filter(function(ds) { return !ds.taxonomyOnly; }).forEach(function(ds) {
         ds.categories.forEach(function(cat) {
             var concepts = cat.concept;
             if (!concepts) return;
@@ -1301,6 +1305,11 @@ function switchDataset(id) {
         console.error('Dataset not found:', id);
         return;
     }
+    if (entry.taxonomyOnly) {
+        // No row-level corpus to load — taxonomy-only layers live in Rosetta/Drift.
+        console.warn('Dataset is taxonomy-only, not selectable:', id);
+        return;
+    }
 
     setActiveSchema(entry);
     rebuildDefTable();
@@ -1506,7 +1515,7 @@ Promise.all([loadRegistry(), loadXref(), loadFuzzyXref()]).then(function(results
     // Determine initial dataset from URL hash
     var hashState = parseHash(location.hash);
     var defaultId = 'openai';
-    if (hashState.dataset && reg.datasets.some(function(d) { return d.id === hashState.dataset; })) {
+    if (hashState.dataset && reg.datasets.some(function(d) { return d.id === hashState.dataset && !d.taxonomyOnly; })) {
         defaultId = hashState.dataset;
         // If hash has filters/search, set pending state for after load
         if (hashState.include || hashState.exclude || hashState.search || hashState.order) {

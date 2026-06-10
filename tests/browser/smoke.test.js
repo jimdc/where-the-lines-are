@@ -1,7 +1,7 @@
 // @ts-check
 var { test, expect } = require('@playwright/test');
 
-var BASE = 'http://localhost:8765';
+var BASE = 'http://localhost:' + (process.env.WTLA_PORT || '8765');
 
 test.describe('WTLA smoke tests', function() {
 
@@ -15,11 +15,52 @@ test.describe('WTLA smoke tests', function() {
         expect(errors).toEqual([]);
     });
 
-    test('all 5 dataset panels visible', async function({ page }) {
+    test('dataset panels match the row-bearing datasets in the registry', async function({ page }) {
         await page.goto(BASE);
         await page.waitForSelector('#mainContent', { state: 'visible', timeout: 30000 });
         var panels = await page.locator('.dataset-panel').count();
-        expect(panels).toBe(5);
+        // The selector shows one panel per selectable (non-taxonomy-only) dataset.
+        var expected = await page.evaluate(async function() {
+            var reg = await fetch('/datasets/registry.json').then(function(r) { return r.json(); });
+            return reg.datasets.filter(function(d) { return !d.taxonomyOnly; }).length;
+        });
+        expect(expected).toBeGreaterThanOrEqual(7); // five legacy + AIR-Bench + AILuminate
+        expect(panels).toBe(expected);
+    });
+
+    test('taxonomy-only layers are NOT shown as selectable panels', async function({ page }) {
+        await page.goto(BASE);
+        await page.waitForSelector('#mainContent', { state: 'visible', timeout: 30000 });
+        var names = await page.locator('.dataset-panel-name').allInnerTexts();
+        expect(names.some(function(n) { return /Constitutional Classifiers/i.test(n); })).toBe(false);
+    });
+
+    test('Rosetta crosswalk has a CBRN / biosecurity row that is empty for legacy datasets', async function({ page }) {
+        await page.goto(BASE);
+        await page.waitForSelector('#mainContent', { state: 'visible', timeout: 30000 });
+        var cbrn = await page.evaluate(function() {
+            var table = document.querySelector('.rosetta-table');
+            var headers = [].slice.call(table.querySelectorAll('thead th')).map(function(th) { return th.textContent; });
+            var rows = [].slice.call(table.querySelectorAll('tbody tr'));
+            for (var i = 0; i < rows.length; i++) {
+                var concept = rows[i].querySelector('.rosetta-concept');
+                if (concept && /CBRN/i.test(concept.textContent)) {
+                    return { headers: headers, cells: [].slice.call(rows[i].querySelectorAll('td')).map(function(td) { return td.textContent; }) };
+                }
+            }
+            return null;
+        });
+        expect(cbrn).not.toBeNull();
+        // cells[0] is the concept label ("CBRN / biosecurity"); cells[1..] are the
+        // per-dataset cells. Legacy datasets (Jigsaw..Aegis) carry no CBRN concept
+        // → em-dash (—). Frontier datasets (AIR-Bench, AILuminate, Anthropic)
+        // fill it in.
+        var dataCells = cbrn.cells.slice(1);
+        var filled = dataCells.filter(function(c) { return c !== '—'; });
+        expect(filled.length).toBeGreaterThanOrEqual(3);
+        // The five legacy datasets must remain empty on this axis.
+        var empty = dataCells.filter(function(c) { return c === '—'; });
+        expect(empty.length).toBeGreaterThanOrEqual(5);
     });
 
     test('default dataset loads with match count > 0', async function({ page }) {

@@ -11,6 +11,8 @@ Usage:
     python scripts/preprocess.py aegis         # download + normalize (+ divergence fields)
     python scripts/preprocess.py jigsaw        # download + normalize
     python scripts/preprocess.py saferlhf      # download + normalize (+ divergence fields)
+    python scripts/preprocess.py airbench      # download + normalize (L4 leaf -> L2 rollup, 16 cats)
+    python scripts/preprocess.py ailuminate    # download + normalize (12-hazard AIRR incl. CBRNE)
     python scripts/preprocess.py registry      # generate registry.json + .js
     python scripts/preprocess.py stats         # compute per-dataset stats into registry
     python scripts/preprocess.py xref          # build cross-dataset prompt index
@@ -23,6 +25,48 @@ import os
 import sys
 
 DATASETS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'datasets')
+
+# AIR-Bench 2024 (stanford-crfm/air-bench-2024) Level-2 taxonomy: 16 categories.
+# Order/names are verbatim from the dataset's `l2-name` column. Each maps to a
+# stable two-letter key used as a binary column. Single source of truth shared
+# by process_airbench() and generate_registry().
+AIRBENCH_L2 = [
+    ('CH', 'Child Harm'),
+    ('CR', 'Criminal Activities'),
+    ('DC', 'Deception'),
+    ('DF', 'Defamation'),
+    ('DB', 'Discrimination/Bias'),
+    ('EH', 'Economic Harm'),
+    ('FR', 'Fundamental Rights'),
+    ('HT', 'Hate/Toxicity'),
+    ('MN', 'Manipulation'),
+    ('OM', 'Operational Misuses'),
+    ('PU', 'Political Usage'),
+    ('PR', 'Privacy'),
+    ('SR', 'Security Risks'),
+    ('SH', 'Self-harm'),
+    ('SX', 'Sexual Content'),
+    ('VE', 'Violence & Extremism'),
+]
+AIRBENCH_NAME_TO_KEY = {name: key for key, name in AIRBENCH_L2}
+
+# MLCommons AILuminate v1.0 (arXiv 2503.05731) 12-hazard AIRR taxonomy.
+# Public DEMO prompt set (10% practice subset, 1,200 prompts, CC-BY-4.0) lives in
+# the mlcommons/ailuminate GitHub repo, NOT on HF (the HF mirror is gated).
+# The release uses sub-codes for two hazards; we roll them up to the 12 top-level
+# hazards: spc_{ele,fin,hlt,lgl} -> Specialized Advice; sxc_prn -> Sexual Content.
+AILUMINATE_HAZARD_TO_KEY = {
+    'vcr': 'VC', 'src': 'SR', 'cse': 'CE', 'ssh': 'SS', 'iwp': 'IW',
+    'ipv': 'IP', 'dfm': 'DF', 'ncr': 'NC', 'hte': 'HT', 'prv': 'PR',
+    'spc_ele': 'SA', 'spc_fin': 'SA', 'spc_hlt': 'SA', 'spc_lgl': 'SA',
+    'sxc_prn': 'SX',
+}
+# Order matches the taxonomy's Physical / Non-Physical / Contextual grouping.
+AILUMINATE_KEYS = ['VC', 'SR', 'CE', 'SS', 'IW', 'IP', 'DF', 'NC', 'HT', 'PR', 'SA', 'SX']
+AILUMINATE_DEMO_CSV = (
+    'https://raw.githubusercontent.com/mlcommons/ailuminate/main/'
+    'airr_official_1.0_demo_en_us_prompt_set_release.csv'
+)
 
 
 def ensure_datasets_dir():
@@ -446,6 +490,128 @@ def process_saferlhf():
 
     print(f'  Final: {len(data)} rows ({skipped} skipped, deduped from {len(ds)})')
     write_json_and_js('saferlhf', data)
+
+
+def process_airbench():
+    """Download and normalize AIR-Bench 2024 (stanford-crfm/air-bench-2024).
+
+    AIR-Bench is single-label per prompt at the leaf (L4). We roll each prompt's
+    L4 leaf up to its Level-2 category (16 categories) and emit a flat
+    {prompt, <16 two-letter keys>: 0|1} row with exactly one key set.
+
+    Because it is single-label at leaf, the L2 rollup is also ~single-label:
+    co-occurrence will be near-diagonal. AIR-Bench's contribution to this tool
+    is taxonomic BREADTH (the policy-derived 16-category frontier taxonomy,
+    including the CBRN/cyber axis absent from the other five datasets), NOT
+    co-occurrence structure. That is honest and documented in the registry note.
+
+    Source CSVs (one per leaf category, 5,694 prompts total) are downloaded from
+    the HF repo over plain HTTP (the `datasets` library is not required).
+    License on the card: cc-by-4.0.
+    """
+    import csv
+    import io
+    import urllib.request
+
+    print('Processing AIR-Bench 2024 dataset...')
+
+    repo = 'stanford-crfm/air-bench-2024'
+    api_url = f'https://huggingface.co/api/datasets/{repo}'
+    print(f'  Listing files from {api_url} ...')
+    with urllib.request.urlopen(api_url) as resp:
+        meta = json.load(resp)
+    csv_files = sorted(
+        s['rfilename'] for s in meta.get('siblings', [])
+        if s['rfilename'].startswith('category_') and s['rfilename'].endswith('.csv')
+    )
+    print(f'  Found {len(csv_files)} category CSVs')
+
+    keys = [k for k, _ in AIRBENCH_L2]
+    rows = []
+    unknown_l2 = set()
+    skipped_empty = 0
+
+    for fname in csv_files:
+        url = f'https://huggingface.co/datasets/{repo}/resolve/main/{fname}'
+        with urllib.request.urlopen(url) as resp:
+            text = resp.read().decode('utf-8')
+        reader = csv.DictReader(io.StringIO(text))
+        for r in reader:
+            prompt = (r.get('prompt') or '').strip()
+            if not prompt:
+                skipped_empty += 1
+                continue
+            l2 = (r.get('l2-name') or '').strip()
+            key = AIRBENCH_NAME_TO_KEY.get(l2)
+            if key is None:
+                unknown_l2.add(l2)
+                continue
+            entry = {'prompt': prompt}
+            for k in keys:
+                entry[k] = 1 if k == key else 0
+            rows.append(entry)
+
+    if unknown_l2:
+        print(f'  WARNING: unmapped L2 names skipped: {sorted(unknown_l2)}')
+    print(f'  Final: {len(rows)} rows ({skipped_empty} empty prompts skipped)')
+    # Sanity: every L2 must be populated (catches a broken mapping early).
+    counts = {k: sum(row[k] for row in rows) for k in keys}
+    zero = [k for k, c in counts.items() if c == 0]
+    if zero:
+        print(f'  WARNING: categories with zero rows: {zero}')
+    write_json_and_js('airbench', rows)
+
+
+def process_ailuminate():
+    """Download and normalize the MLCommons AILuminate v1.0 DEMO prompt set.
+
+    Public 10% practice subset (1,200 prompts, CC-BY-4.0) from the
+    mlcommons/ailuminate GitHub repo. Each prompt carries exactly one hazard;
+    we roll the release's sub-codes up to the 12 top-level AIRR hazards and emit
+    a flat {prompt, <12 keys>: 0|1} row with one key set.
+
+    Like AIR-Bench, this is single-label by construction (near-diagonal
+    co-occurrence). Its value here is the dedicated, MEASURED
+    'Indiscriminate Weapons (CBRNE)' hazard — the explicit CBRN category that
+    the five legacy datasets lack.
+    """
+    import csv
+    import io
+    import urllib.request
+
+    print('Processing MLCommons AILuminate v1.0 DEMO dataset...')
+    print(f'  Downloading {AILUMINATE_DEMO_CSV} ...')
+    with urllib.request.urlopen(AILUMINATE_DEMO_CSV) as resp:
+        text = resp.read().decode('utf-8')
+
+    reader = csv.DictReader(io.StringIO(text))
+    rows = []
+    unknown = set()
+    skipped_empty = 0
+    for r in reader:
+        prompt = (r.get('prompt_text') or '').strip()
+        if not prompt:
+            skipped_empty += 1
+            continue
+        hazard = (r.get('hazard') or '').strip()
+        key = AILUMINATE_HAZARD_TO_KEY.get(hazard)
+        if key is None:
+            unknown.add(hazard)
+            continue
+        entry = {'prompt': prompt}
+        for k in AILUMINATE_KEYS:
+            entry[k] = 1 if k == key else 0
+        rows.append(entry)
+
+    if unknown:
+        print(f'  WARNING: unmapped hazard codes skipped: {sorted(unknown)}')
+    print(f'  Final: {len(rows)} rows ({skipped_empty} empty prompts skipped)')
+    counts = {k: sum(row[k] for row in rows) for k in AILUMINATE_KEYS}
+    zero = [k for k, c in counts.items() if c == 0]
+    if zero:
+        print(f'  WARNING: categories with zero rows: {zero}')
+    print(f'  CBRNE (IW) count: {counts["IW"]}')
+    write_json_and_js('ailuminate', rows)
 
 
 def compute_stats():
@@ -1081,9 +1247,160 @@ def generate_registry():
                     {'key': 'VL', 'name': 'violence', 'short': 'violence',
                      'definition': 'Content depicting or promoting violence.'}
                 ]
+            },
+            {
+                'id': 'airbench',
+                'name': 'AIR-Bench 2024',
+                'source': 'Stanford CRFM (2024)',
+                'license': 'CC-BY-4.0',
+                'paper': 'https://arxiv.org/abs/2407.17436',
+                'repo': 'https://huggingface.co/datasets/stanford-crfm/air-bench-2024',
+                'file': 'datasets/airbench.json',
+                'fileJs': 'datasets/airbench.js',
+                'textField': 'prompt',
+                'note': '5,694 prompts derived from 8 government regulations and 16 company '
+                        'policies (incl. Anthropic and OpenAI), organized in a 4-level AI-risk '
+                        'taxonomy (4→16→45→314). Rolled up here to the 16 Level-2 '
+                        'categories. Single-label at the leaf, so co-occurrence is near-diagonal '
+                        'by design — AIR-Bench’s contribution is taxonomic breadth, '
+                        'notably the CBRN/biosecurity and cyber axes absent from the other five '
+                        'datasets.',
+                'categories': [
+                    {'key': 'CH', 'name': 'child harm', 'short': 'child harm', 'concept': 'minors',
+                     'definition': 'Content sexualizing, endangering, harming, or abusing minors (AIR L2 “Child Harm”: child sexual abuse; endangerment, harm, or abuse of children).'},
+                    {'key': 'CR', 'name': 'criminal activities', 'short': 'criminal', 'concept': ['substances', 'trafficking'],
+                     'definition': 'Facilitating crime — illegal/regulated substances and goods (drugs), human trafficking, prostitution, sexual exploitation, and other unlawful activity (AIR L2 “Criminal Activities”).'},
+                    {'key': 'DC', 'name': 'deception', 'short': 'deception', 'concept': ['fraud', 'misinfo'],
+                     'definition': 'Fraud (phishing, scams, impersonation), academic dishonesty, and mis/disinformation (AIR L2 “Deception”).'},
+                    {'key': 'DF', 'name': 'defamation', 'short': 'defamation', 'concept': 'other',
+                     'definition': 'Generating defamatory content that damages reputation through false statements of fact (AIR L2 “Defamation”).'},
+                    {'key': 'DB', 'name': 'discrimination/bias', 'short': 'discrimination', 'concept': 'hate',
+                     'definition': 'Discrimination or bias against protected characteristics (AIR L2 “Discrimination/Bias”; 60 protected-characteristic combinations).'},
+                    {'key': 'EH', 'name': 'economic harm', 'short': 'economic harm', 'concept': 'fraud',
+                     'definition': 'Economic harms — disempowering workers, high-risk financial activities, pyramid/MLM schemes, and unfair market practices (AIR L2 “Economic Harm”).'},
+                    {'key': 'FR', 'name': 'fundamental rights', 'short': 'fund. rights', 'concept': 'copyright',
+                     'definition': 'Violating personal and intellectual-property rights — honor, name, portrait, reputation, and IP/trade-secret rights (AIR L2 “Fundamental Rights”).'},
+                    {'key': 'HT', 'name': 'hate/toxicity', 'short': 'hate/toxicity', 'concept': ['hate', 'toxicity', 'harassment'],
+                     'definition': 'Hate speech, harassment, offensive language, and perpetuating harmful beliefs (AIR L2 “Hate/Toxicity”).'},
+                    {'key': 'MN', 'name': 'manipulation', 'short': 'manipulation', 'concept': 'manipulation',
+                     'definition': 'Manipulating people through misrepresentation (impersonating humans, undisclosed AI-generated content) and sowing division (AIR L2 “Manipulation”).'},
+                    {'key': 'OM', 'name': 'operational misuses', 'short': 'operational', 'concept': 'other',
+                     'definition': 'Unsafe operational uses — advice in heavily regulated industries, automated decision-making, and autonomous unsafe operation of critical systems (AIR L2 “Operational Misuses”).'},
+                    {'key': 'PU', 'name': 'political usage', 'short': 'political', 'concept': 'politics',
+                     'definition': 'Political uses — deterring democratic participation, influencing politics, political persuasion, and disrupting social order (AIR L2 “Political Usage”).'},
+                    {'key': 'PR', 'name': 'privacy', 'short': 'privacy', 'concept': 'privacy',
+                     'definition': 'Privacy violations and disclosure of sensitive personal data (AIR L2 “Privacy”; 72 sensitive-data combinations).'},
+                    {'key': 'SR', 'name': 'security risks', 'short': 'security/cyber', 'concept': 'cyber',
+                     'definition': 'Cybersecurity harms across confidentiality (network intrusion, social engineering, spear phishing), integrity (malware, data tampering), and availability (network disruption) (AIR L2 “Security Risks”).'},
+                    {'key': 'SH', 'name': 'self-harm', 'short': 'self-harm', 'concept': 'self-harm',
+                     'definition': 'Suicidal and non-suicidal self-injury content (AIR L2 “Self-harm”).'},
+                    {'key': 'SX', 'name': 'sexual content', 'short': 'sexual', 'concept': 'sexual',
+                     'definition': 'Adult and erotic sexual content, monetized sexual services, and non-consensual nudity (AIR L2 “Sexual Content”).'},
+                    {'key': 'VE', 'name': 'violence & extremism', 'short': 'violence/CBRN', 'concept': ['violence', 'terrorism', 'CBRN / biosecurity', 'animal'],
+                     'definition': 'Violence and extremism — depicting/celebrating violence, military and warfare, support for malicious organized groups (terrorism, extremism), and Weapon Usage & Development including CBRN: bioweapons/viruses/gain-of-function, chemical, nuclear, and radiological weapons (AIR L2 “Violence & Extremism”). The only labeled dataset in this tool whose taxonomy reaches the CBRN/biosecurity axis.'}
+                ]
+            },
+            {
+                'id': 'ailuminate',
+                'name': 'MLCommons AILuminate v1.0',
+                'source': 'MLCommons (2025)',
+                'license': 'CC-BY-4.0',
+                'paper': 'https://arxiv.org/abs/2503.05731',
+                'repo': 'https://github.com/mlcommons/ailuminate',
+                'file': 'datasets/ailuminate.json',
+                'fileJs': 'datasets/ailuminate.js',
+                'textField': 'prompt',
+                'note': 'Public DEMO prompt set: 1,200 human-written prompts (a 10% subset of the '
+                        'practice corpus, CC-BY-4.0) labeled across the 12-hazard AIRR taxonomy. '
+                        'Single-label per prompt, so co-occurrence is near-diagonal. Its keystone '
+                        'contribution is a dedicated, MEASURED “Indiscriminate Weapons (CBRNE)” '
+                        'hazard — chemical/biological/radiological/nuclear/explosive — the explicit '
+                        'CBRN category the five legacy datasets lack.',
+                'categories': [
+                    {'key': 'VC', 'name': 'violent crimes', 'short': 'violent crime', 'concept': 'violence',
+                     'definition': 'Prompts seeking to enable, encourage, or endorse violent crimes (AILuminate hazard “vcr”, Physical Hazards).'},
+                    {'key': 'SR', 'name': 'sex-related crimes', 'short': 'sex crimes', 'concept': ['sexual', 'trafficking'],
+                     'definition': 'Prompts seeking to enable sex-related crimes — sexual assault, harassment, trafficking (AILuminate hazard “src”, Physical Hazards).'},
+                    {'key': 'CE', 'name': 'child sexual exploitation', 'short': 'child exploit.', 'concept': 'minors',
+                     'definition': 'Prompts seeking to enable, encourage, or endorse the sexual abuse or exploitation of children (AILuminate hazard “cse”, Physical Hazards).'},
+                    {'key': 'SS', 'name': 'suicide & self-harm', 'short': 'self-harm', 'concept': 'self-harm',
+                     'definition': 'Prompts seeking to enable or encourage suicide or self-harm (AILuminate hazard “ssh”, Physical Hazards).'},
+                    {'key': 'IW', 'name': 'indiscriminate weapons (CBRNE)', 'short': 'CBRNE', 'concept': 'CBRN / biosecurity',
+                     'definition': 'Prompts seeking to enable the creation or use of indiscriminate weapons — chemical, biological, radiological, nuclear, and high-yield explosive (AILuminate hazard “iwp”, Physical Hazards). The explicit, measured CBRN category.'},
+                    {'key': 'IP', 'name': 'intellectual property violations', 'short': 'IP', 'concept': 'copyright',
+                     'definition': 'Prompts seeking to violate intellectual-property rights (AILuminate hazard “ipv”, Non-Physical Hazards).'},
+                    {'key': 'DF', 'name': 'defamation', 'short': 'defamation', 'concept': 'other',
+                     'definition': 'Prompts seeking to create defamatory content about real, living people (AILuminate hazard “dfm”, Non-Physical Hazards).'},
+                    {'key': 'NC', 'name': 'non-violent crimes', 'short': 'non-violent crime', 'concept': 'other',
+                     'definition': 'Prompts seeking to enable, encourage, or endorse non-violent crimes (AILuminate hazard “ncr”, Non-Physical Hazards).'},
+                    {'key': 'HT', 'name': 'hate', 'short': 'hate', 'concept': 'hate',
+                     'definition': 'Prompts that demean or dehumanize people on the basis of protected characteristics (AILuminate hazard “hte”, Non-Physical Hazards).'},
+                    {'key': 'PR', 'name': 'privacy violations', 'short': 'privacy', 'concept': 'privacy',
+                     'definition': 'Prompts seeking to violate the privacy or security of private individuals (AILuminate hazard “prv”, Non-Physical Hazards).'},
+                    {'key': 'SA', 'name': 'specialized advice', 'short': 'spec. advice', 'concept': 'other',
+                     'definition': 'Prompts seeking unqualified specialized advice — electoral, financial, health, or legal (AILuminate hazard “spc”, Contextual Hazards; sub-codes rolled up here).'},
+                    {'key': 'SX', 'name': 'sexual content', 'short': 'sexual', 'concept': 'sexual',
+                     'definition': 'Prompts seeking pornographic or otherwise explicit sexual content (AILuminate hazard “sxc”, Contextual Hazards).'}
+                ]
+            },
+            {
+                'id': 'anthropic-cc',
+                'name': 'Anthropic Constitutional Classifiers',
+                'source': 'Anthropic (2025)',
+                'license': 'N/A — taxonomy only',
+                'certainty': 'taxonomy-only',
+                'taxonomyOnly': True,
+                'rows': None,
+                'paper': 'https://arxiv.org/abs/2501.18837',
+                'repo': 'https://www.anthropic.com/research/constitutional-classifiers',
+                'textField': 'prompt',
+                'note': 'Frontier DEPLOYMENT classifiers that intercept model inputs and outputs in '
+                        'real time. The category list is published, but there is NO public '
+                        'row-level corpus — so this layer carries no counts, co-occurrence, or '
+                        'statistics. It appears in the taxonomy crosswalk (Rosetta) and the '
+                        'evolution timeline (Drift) ONLY, badged “taxonomy only”. Focus is CBRN: '
+                        'chemical, biological, radiological, and nuclear weapons (Constitutional '
+                        'Classifiers, arXiv 2501.18837; next-gen “Constitutional Classifiers++”, '
+                        'Jan 2026; biosecurity safeguards at red.anthropic.com/2025/biorisk).',
+                'categories': [
+                    {'key': 'CW', 'name': 'chemical weapons', 'short': 'chemical', 'concept': 'CBRN / biosecurity',
+                     'sourceUrl': 'https://arxiv.org/abs/2501.18837',
+                     'definition': 'Synthesis or acquisition of chemical weapons and Schedule 1 chemicals. The original Constitutional Classifiers were trained on a chemical-weapons constitution (Anthropic, arXiv 2501.18837).'},
+                    {'key': 'BW', 'name': 'biological weapons', 'short': 'biological', 'concept': 'CBRN / biosecurity',
+                     'sourceUrl': 'https://red.anthropic.com/2025/biorisk/',
+                     'definition': 'Uplift toward dangerous biological agents — virology, synthetic biology, and genetic-engineering knowledge — the focus of Anthropic’s ASL-3 biosecurity safeguards (red.anthropic.com/2025/biorisk).'},
+                    {'key': 'RW', 'name': 'radiological weapons', 'short': 'radiological', 'concept': 'CBRN / biosecurity',
+                     'sourceUrl': 'https://www.anthropic.com/research/next-generation-constitutional-classifiers',
+                     'definition': 'Acquisition or use of radiological weapons (e.g. dirty bombs); part of the CBRN scope guarded by next-generation Constitutional Classifiers (Anthropic, Jan 2026).'},
+                    {'key': 'NW', 'name': 'nuclear weapons', 'short': 'nuclear', 'concept': 'CBRN / biosecurity',
+                     'sourceUrl': 'https://www.anthropic.com/activating-asl3-report',
+                     'definition': 'Design or acquisition of nuclear weapons; part of the CBRN scope guarded by Anthropic’s deployment classifiers and ASL-3 protections (Activating ASL-3 report, 2025).'}
+                ]
             }
         ]
     }
+
+    # Preserve hand-annotated `concept` fields (used by the Rosetta Stone and
+    # Drift timeline) from the existing registry.json. generate_registry() does
+    # not author concepts for the five legacy datasets, so without this merge a
+    # regeneration would silently wipe the entire crosswalk. New entries above
+    # carry their concepts inline and are left untouched.
+    reg_path = os.path.join(DATASETS_DIR, 'registry.json')
+    if os.path.exists(reg_path):
+        with open(reg_path) as f:
+            old_reg = json.load(f)
+        old_concepts = {}
+        for ds in old_reg.get('datasets', []):
+            for cat in ds.get('categories', []):
+                if 'concept' in cat:
+                    old_concepts[(ds['id'], cat['key'])] = cat['concept']
+        restored = 0
+        for ds in registry['datasets']:
+            for cat in ds['categories']:
+                if 'concept' not in cat and (ds['id'], cat['key']) in old_concepts:
+                    cat['concept'] = old_concepts[(ds['id'], cat['key'])]
+                    restored += 1
+        print(f'  Preserved {restored} concept fields from existing registry.json')
 
     # Write registry (Aegis categories will be updated after processing)
     json_path = os.path.join(DATASETS_DIR, 'registry.json')
@@ -1143,6 +1460,10 @@ def main():
         process_jigsaw()
     elif cmd == 'saferlhf':
         process_saferlhf()
+    elif cmd == 'airbench':
+        process_airbench()
+    elif cmd == 'ailuminate':
+        process_ailuminate()
     elif cmd == 'registry':
         generate_registry()
     elif cmd == 'stats':
@@ -1158,6 +1479,8 @@ def main():
         process_beavertails()
         process_saferlhf()
         process_aegis()
+        process_airbench()
+        process_ailuminate()
         compute_stats()
         build_xref()
     else:
