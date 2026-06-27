@@ -535,6 +535,14 @@ mark {
     color: #754;
     border-bottom-color: #754;
 }
+.semantic-indicator {
+    color: #86a;
+    border-bottom-color: #a9c;
+}
+.semantic-indicator:hover {
+    color: #545;
+    border-bottom-color: #545;
+}
 
 /* ── Xref Panel ── */
 #xrefPanel {

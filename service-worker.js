@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ew-cache-v10';
+const CACHE_NAME = 'ew-cache-v11';
 const URLS_TO_CACHE = [
   './',
   './index.html',
@@ -6,6 +6,7 @@ const URLS_TO_CACHE = [
   './datasets/registry.json',
   './datasets/xref.json',
   './datasets/xref-fuzzy.json',
+  './datasets/xref-semantic.json',
   './datasets/jigsaw.json',
   './datasets/openai.json',
   './datasets/airbench.json',

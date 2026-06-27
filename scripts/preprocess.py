@@ -17,6 +17,7 @@ Usage:
     python scripts/preprocess.py stats         # compute per-dataset stats into registry
     python scripts/preprocess.py xref          # build cross-dataset prompt index
     python scripts/preprocess.py fuzzy         # build fuzzy cross-dataset matching
+    python scripts/preprocess.py semantic      # build embedding (semantic) cross-dataset matching
     python scripts/preprocess.py all           # run all of the above
 """
 
@@ -1549,6 +1550,170 @@ def update_registry_aegis_categories(cats_info):
     print('  Updated registry with Aegis categories')
 
 
+def build_semantic_xref():
+    """Build embedding-based cross-dataset prompt matching (companion to xref-fuzzy).
+
+    Surfaces pairs the Jaccard pipeline (build_fuzzy_xref, keep-cutoff 0.7) structurally
+    CANNOT find: synonym swaps ("buy"/"purchase"), rephrasings, typo-robust matches, and
+    cross-genre bridges (organic corpora <-> authored red-team benchmarks). Reuses cangshu's
+    recipe: sentence-transformers all-MiniLM-L6-v2 + cosine.
+
+    Keeps pairs with cosine >= COSINE_MIN AND jaccard <= JACCARD_MAX, so the output is
+    DISJOINT from xref-fuzzy (which requires jaccard >= 0.7) — a true additive companion.
+    Embeddings are computed offline and NOT shipped; only the matched pairs (same shape as
+    xref-fuzzy) are written to disk.
+
+    Output: xref-semantic.json / .js with entries:
+    {prompts: [text_a, text_b], similarity: <cosine>, matches: [{dataset, cats}, ...]}
+    """
+    import re
+
+    COSINE_MIN = 0.72       # high-precision floor; below ~0.7 -> "related topic", not same request
+    JACCARD_MAX = 0.50      # below fuzzy's 0.7 keep-cutoff -> zero overlap with xref-fuzzy
+    MAX_MATCHES = 10000     # mirror the fuzzy cap
+    CHUNK = 512             # rows per matmul block (bounds peak memory)
+    MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2'
+
+    try:
+        import numpy as np
+        from sentence_transformers import SentenceTransformer
+    except ImportError as exc:
+        print('  semantic xref needs numpy + sentence-transformers (optional dep).')
+        print('    pip install sentence-transformers')
+        print(f'    (missing module: {getattr(exc, "name", exc)})')
+        return
+
+    print('Building semantic cross-dataset matching (xref-semantic)...')
+
+    # ---- same prompt filter + tokenizer as build_fuzzy_xref (apples-to-apples Jaccard) ----
+    STOP_WORDS = set((
+        'the and to a of it in i that is on for with as are was this but be have has had or '
+        'an my if me so you we they he she them his her your their our us do does did at by '
+        'from what who which where when why how can could should would will just not very into '
+        'also about up down out no yes more some than'
+    ).split())
+
+    def tokenize(text):
+        words = re.sub(r'[^a-z0-9\s]', '', text.lower()).split()
+        return [w for w in words if w not in STOP_WORDS and len(w) >= 2]
+
+    with open(os.path.join(DATASETS_DIR, 'registry.json')) as f:
+        registry = json.load(f)
+
+    exact_norms = set()
+    xref_path = os.path.join(DATASETS_DIR, 'xref.json')
+    if os.path.exists(xref_path):
+        with open(xref_path) as f:
+            for entry in json.load(f):
+                exact_norms.add(entry['prompt'])
+
+    by_dataset = {}  # ds_id -> [{text, tokens, cats}]
+    for ds_entry in registry['datasets']:
+        ds_id = ds_entry['id']
+        json_path = os.path.join(DATASETS_DIR, f'{ds_id}.json')
+        if not os.path.exists(json_path):
+            continue  # taxonomy-only datasets have no on-disk corpus
+        text_field = ds_entry.get('textField', 'prompt')
+        keys = [c['key'] for c in ds_entry.get('categories', [])]
+        with open(json_path) as f:
+            data = json.load(f)
+        items = []
+        for row in data:
+            text = row.get(text_field, '')
+            if not text or len(text.strip()) < 10:
+                continue
+            norm = re.sub(r'\s+', ' ', text.strip().lower())
+            if norm in exact_norms:
+                continue  # skip exact matches (already in xref)
+            # Embed, tokenize, AND display the SAME window so cosine and jaccard see exactly
+            # what the user sees. 200 chars (matching xref-fuzzy's display form) sits well
+            # inside MiniLM's token window, so there is no model-side truncation skew — and
+            # prompts sharing a near-identical prefix get jaccard~1.0 and are correctly dropped
+            # (mismatched windows would let them embed as cos~1.0 yet slip the jaccard gate).
+            disp = text.strip()[:200]
+            tokens = set(tokenize(disp))
+            if len(tokens) < 2:
+                continue
+            flagged = [k for k in keys if row.get(k, 0) == 1]
+            if not flagged:
+                continue
+            items.append({'text': disp, 'tokens': tokens, 'cats': flagged})
+        if items:
+            by_dataset[ds_id] = items
+            print(f'  {ds_id}: {len(items)} eligible prompts')
+
+    ds_ids = sorted(by_dataset.keys())
+    if len(ds_ids) < 2:
+        print('  Need >=2 datasets with eligible prompts; nothing to do.')
+        return
+
+    print(f'  Embedding with {MODEL_NAME} (normalized -> cosine = dot)...')
+    model = SentenceTransformer(MODEL_NAME)
+    emb = {}
+    for ds_id in ds_ids:
+        texts = [p['text'] for p in by_dataset[ds_id]]
+        emb[ds_id] = model.encode(
+            texts, batch_size=128, normalize_embeddings=True, show_progress_bar=False
+        ).astype(np.float32)
+        print(f'    embedded {ds_id}: {emb[ds_id].shape[0]}')
+
+    print(f'  Scanning cross-dataset pairs (cosine>={COSINE_MIN}, jaccard<={JACCARD_MAX})...')
+    matches = []
+    seen = set()
+    for i in range(len(ds_ids)):
+        for j in range(i + 1, len(ds_ids)):
+            ds_a, ds_b = ds_ids[i], ds_ids[j]
+            emb_a, emb_b = emb[ds_a], emb[ds_b]
+            pair_n = 0
+            # top-1 partner in B for each prompt in A (chunked matmul bounds peak memory)
+            for start in range(0, emb_a.shape[0], CHUNK):
+                block = emb_a[start:start + CHUNK]
+                sims = block @ emb_b.T                  # (chunk x nB) cosine, both normalized
+                best_b = sims.argmax(axis=1)
+                best_s = sims.max(axis=1)
+                for off in range(block.shape[0]):
+                    score = float(best_s[off])
+                    if score < COSINE_MIN:
+                        continue
+                    pa = by_dataset[ds_a][start + off]
+                    pb = by_dataset[ds_b][int(best_b[off])]
+                    union = len(pa['tokens'] | pb['tokens'])
+                    jac = len(pa['tokens'] & pb['tokens']) / union if union else 0.0
+                    if jac > JACCARD_MAX:
+                        continue
+                    key = (ds_a, pa['text'], ds_b, pb['text'])
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    matches.append({
+                        'prompts': [pa['text'], pb['text']],
+                        'similarity': round(score, 3),
+                        'matches': [
+                            {'dataset': ds_a, 'cats': pa['cats']},
+                            {'dataset': ds_b, 'cats': pb['cats']},
+                        ],
+                    })
+                    pair_n += 1
+            if pair_n:
+                print(f'    {ds_a} x {ds_b}: {pair_n} semantic matches')
+
+    matches.sort(key=lambda x: -x['similarity'])
+    matches = matches[:MAX_MATCHES]
+    print(f'  Total semantic matches: {len(matches)}')
+
+    json_path = os.path.join(DATASETS_DIR, 'xref-semantic.json')
+    js_path = os.path.join(DATASETS_DIR, 'xref-semantic.js')
+    with open(json_path, 'w') as f:
+        json.dump(matches, f, separators=(',', ':'))
+    size_mb = os.path.getsize(json_path) / (1024 * 1024)
+    print(f'  Wrote {json_path} ({size_mb:.2f} MB)')
+    with open(js_path, 'w') as f:
+        f.write('var dataset_xref_semantic = ')
+        json.dump(matches, f, separators=(',', ':'))
+        f.write(';\n')
+    print(f'  Wrote {js_path}')
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -1581,6 +1746,8 @@ def main():
         build_xref()
     elif cmd == 'fuzzy':
         build_fuzzy_xref()
+    elif cmd == 'semantic':
+        build_semantic_xref()
     elif cmd == 'all':
         generate_registry()
         process_openai()

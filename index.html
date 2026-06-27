@@ -243,8 +243,23 @@ var XREF_DATA = [];
 var XREF_INDEX = {}; // normalized prompt → xref entry
 var XREF_FUZZY = [];
 var XREF_FUZZY_INDEX = {}; // normalized prompt → fuzzy xref entry
+var XREF_SEMANTIC = [];
+var XREF_SEMANTIC_INDEX = {}; // normalized prompt → semantic (embedding) xref entry
 
-function buildXrefIndex(xrefArray, fuzzyArray) {
+function indexPromptPairs(entries, index) {
+    (entries || []).forEach(function(entry) {
+        if (entry.prompts && entry.prompts.length) {
+            entry.prompts.forEach(function(p) {
+                var norm = (p || '').toLowerCase().replace(/\s+/g, ' ').trim();
+                if (norm && !index[norm]) {
+                    index[norm] = entry;
+                }
+            });
+        }
+    });
+}
+
+function buildXrefIndex(xrefArray, fuzzyArray, semanticArray) {
     XREF_DATA = xrefArray || [];
     XREF_INDEX = {};
     XREF_DATA.forEach(function(entry) {
@@ -253,16 +268,11 @@ function buildXrefIndex(xrefArray, fuzzyArray) {
 
     XREF_FUZZY = fuzzyArray || [];
     XREF_FUZZY_INDEX = {};
-    XREF_FUZZY.forEach(function(entry) {
-        if (entry.prompts && entry.prompts.length) {
-            entry.prompts.forEach(function(p) {
-                var norm = (p || '').toLowerCase().replace(/\s+/g, ' ').trim();
-                if (norm && !XREF_FUZZY_INDEX[norm]) {
-                    XREF_FUZZY_INDEX[norm] = entry;
-                }
-            });
-        }
-    });
+    indexPromptPairs(XREF_FUZZY, XREF_FUZZY_INDEX);
+
+    XREF_SEMANTIC = semanticArray || [];
+    XREF_SEMANTIC_INDEX = {};
+    indexPromptPairs(XREF_SEMANTIC, XREF_SEMANTIC_INDEX);
 }
 
 /* normalizePrompt is now in static/logic.js */
@@ -1042,6 +1052,13 @@ function buildResultRow(row, rawQuery, maxSurprise) {
             var simPct = Math.round(fuzzyMatch.similarity * 100);
             promptHtml += ' <span class="xref-indicator fuzzy-indicator" data-fuzzy="' +
                 normP.replace(/"/g, '&quot;') + '">~' + simPct + '% match</span>';
+        } else {
+            var semanticMatch = XREF_SEMANTIC_INDEX[normP];
+            if (semanticMatch) {
+                var semPct = Math.round(semanticMatch.similarity * 100);
+                promptHtml += ' <span class="xref-indicator semantic-indicator" data-semantic="' +
+                    normP.replace(/"/g, '&quot;') + '">≈' + semPct + '% related</span>';
+            }
         }
     }
     td1.innerHTML = promptHtml;
@@ -1504,17 +1521,11 @@ document.getElementById('resultsVirtual').addEventListener('click', function(e) 
         if (!fuzzyEntry) return;
         var panel = document.getElementById('xrefPanel');
         var content = document.getElementById('xrefContent');
-        content.innerHTML = '';
-
-        var simP = document.createElement('p');
-        simP.style.cssText = 'font-size:0.82em;color:#888;margin-bottom:0.5rem;font-family:system-ui,-apple-system,sans-serif;';
-        simP.textContent = 'Fuzzy match (' + Math.round(fuzzyEntry.similarity * 100) + '% Jaccard similarity)';
-        content.appendChild(simP);
 
         renderCrossDatasetMatch(content, {
             prompt: fuzzyEntry.prompts[0],
             matches: fuzzyEntry.matches
-        }, registry);
+        }, registry, 'Fuzzy match (' + Math.round(fuzzyEntry.similarity * 100) + '% Jaccard similarity)');
 
         if (fuzzyEntry.prompts.length > 1) {
             var altP = document.createElement('p');
@@ -1525,6 +1536,31 @@ document.getElementById('resultsVirtual').addEventListener('click', function(e) 
 
         panel.style.display = '';
         panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        return;
+    }
+
+    // Check for semantic (embedding) match
+    var semanticKey = indicator.getAttribute('data-semantic');
+    if (semanticKey) {
+        var semanticEntry = XREF_SEMANTIC_INDEX[semanticKey];
+        if (!semanticEntry) return;
+        var sPanel = document.getElementById('xrefPanel');
+        var sContent = document.getElementById('xrefContent');
+
+        renderCrossDatasetMatch(sContent, {
+            prompt: semanticEntry.prompts[0],
+            matches: semanticEntry.matches
+        }, registry, 'Semantically related (' + Math.round(semanticEntry.similarity * 100) + '% embedding cosine — different words, same intent)');
+
+        if (semanticEntry.prompts.length > 1) {
+            var semAlt = document.createElement('p');
+            semAlt.style.cssText = 'font-size:0.82em;color:#666;margin-top:0.5rem;';
+            semAlt.textContent = 'Related text: “' + semanticEntry.prompts[1].slice(0, 150) + '”';
+            sContent.appendChild(semAlt);
+        }
+
+        sPanel.style.display = '';
+        sPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         return;
     }
 
@@ -1546,12 +1582,13 @@ document.getElementById('xrefClose').addEventListener('click', function() {
 /* ── Boot: load registry + xref, then default dataset ── */
 showLoading('Loading dataset registry...');
 
-Promise.all([loadRegistry(), loadXref(), loadFuzzyXref()]).then(function(results) {
+Promise.all([loadRegistry(), loadXref(), loadFuzzyXref(), loadSemanticXref()]).then(function(results) {
     var reg = results[0];
     var xref = results[1];
     var fuzzyXref = results[2];
+    var semanticXref = results[3];
     registry = reg;
-    buildXrefIndex(xref, fuzzyXref);
+    buildXrefIndex(xref, fuzzyXref, semanticXref);
 
     // Render registry-only visualizations (no dataset loading needed)
     renderTaxonomyAlignment(document.getElementById('rosettaTable'), reg);

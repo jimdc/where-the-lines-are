@@ -92,6 +92,35 @@ function loadFuzzyXref() {
     });
 }
 
+function loadSemanticXref() {
+    return new Promise(function(resolve, reject) {
+        if (location.protocol === 'file:') {
+            var script = document.createElement('script');
+            script.src = 'datasets/xref-semantic.js';
+            script.onload = function() {
+                if (typeof window.dataset_xref_semantic !== 'undefined') {
+                    resolve(window.dataset_xref_semantic);
+                } else {
+                    reject(new Error('xref-semantic.js loaded but dataset_xref_semantic not defined'));
+                }
+            };
+            script.onerror = function() {
+                // semantic xref is optional — resolve empty if missing
+                resolve([]);
+            };
+            document.head.appendChild(script);
+        } else {
+            fetch('datasets/xref-semantic.json')
+                .then(function(r) {
+                    if (!r.ok) return [];
+                    return r.json();
+                })
+                .then(resolve)
+                .catch(function() { resolve([]); });
+        }
+    });
+}
+
 function loadDataset(jsonPath, jsPath) {
     return new Promise(function(resolve, reject) {
         if (location.protocol === 'file:') {

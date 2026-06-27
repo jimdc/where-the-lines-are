@@ -1203,9 +1203,18 @@ function drawConceptComparison(canvas, datasets) {
 
 /* ── 13. Doppelganger: Cross-Dataset Match Panel (DOM) ── */
 
-function renderCrossDatasetMatch(container, xrefEntry, registry) {
+function renderCrossDatasetMatch(container, xrefEntry, registry, captionText) {
     container.innerHTML = '';
     if (!xrefEntry || !xrefEntry.matches) return;
+
+    // Optional caption (e.g. "Fuzzy match …" / "Semantically related …"). Rendered here so
+    // it survives the innerHTML reset above — callers that appended it first had it wiped.
+    if (captionText) {
+        var captionP = document.createElement('p');
+        captionP.style.cssText = 'font-size:0.82em;color:#888;margin-bottom:0.5rem;font-family:system-ui,-apple-system,sans-serif;';
+        captionP.textContent = captionText;
+        container.appendChild(captionP);
+    }
 
     // Build dataset name lookup
     var dsNames = {};
