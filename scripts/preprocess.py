@@ -18,14 +18,22 @@ Usage:
     python scripts/preprocess.py xref          # build cross-dataset prompt index
     python scripts/preprocess.py fuzzy         # build fuzzy cross-dataset matching
     python scripts/preprocess.py semantic      # build embedding (semantic) cross-dataset matching
+    python scripts/preprocess.py sw            # re-derive service-worker CACHE_NAME (content hash)
     python scripts/preprocess.py all           # run all of the above
+
+Every command finishes by re-deriving the service-worker CACHE_NAME from a
+content hash of the precached assets, so regenerated datasets (or edited UI
+files) automatically bust the offline cache. A no-op regen leaves it unchanged.
 """
 
+import hashlib
 import json
 import os
+import re
 import sys
 
 DATASETS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'datasets')
+SW_PATH = os.path.join(os.path.dirname(DATASETS_DIR), 'service-worker.js')
 
 # AIR-Bench 2024 (stanford-crfm/air-bench-2024) Level-2 taxonomy: 16 categories.
 # Order/names are verbatim from the dataset's `l2-name` column. Each maps to a
@@ -1714,6 +1722,50 @@ def build_semantic_xref():
     print(f'  Wrote {js_path}')
 
 
+def sync_sw_cache_name():
+    """Derive the service-worker CACHE_NAME from a content hash of the precached assets.
+
+    Reads URLS_TO_CACHE out of service-worker.js (single source of truth),
+    hashes every referenced file (path + bytes, sorted, deduped), and rewrites
+    the CACHE_NAME assignment to 'ew-cache-<12-hex-digits>'. Any byte change
+    in a precached dataset or UI file yields a new name (cache bust on next SW
+    update); if nothing changed, the file is left untouched. Mirrored by
+    tests/data/sw-cache.test.js, which fails when CACHE_NAME is stale.
+    """
+    with open(SW_PATH, encoding='utf-8') as f:
+        sw = f.read()
+    m = re.search(r'const URLS_TO_CACHE = \[(.*?)\];', sw, re.S)
+    if not m:
+        raise RuntimeError('URLS_TO_CACHE array not found in service-worker.js')
+    urls = re.findall(r"'([^']+)'", m.group(1))
+    root = os.path.dirname(SW_PATH)
+    paths = sorted({
+        'index.html' if u in ('./', '.') else (u[2:] if u.startswith('./') else u)
+        for u in urls
+    })
+    h = hashlib.sha256()
+    for p in paths:
+        fp = os.path.join(root, p)
+        if not os.path.isfile(fp):
+            raise RuntimeError(f'service-worker precached file missing: {p}')
+        h.update(p.encode('utf-8'))
+        h.update(b'\0')
+        with open(fp, 'rb') as f:
+            h.update(f.read())
+        h.update(b'\0')
+    name = f'ew-cache-{h.hexdigest()[:12]}'
+    new_sw, n = re.subn(r"const CACHE_NAME = '[^']*';",
+                        f"const CACHE_NAME = '{name}';", sw, count=1)
+    if n != 1:
+        raise RuntimeError('CACHE_NAME assignment not found in service-worker.js')
+    if new_sw != sw:
+        with open(SW_PATH, 'w', encoding='utf-8') as f:
+            f.write(new_sw)
+        print(f'service-worker.js: CACHE_NAME -> {name} (bumped)')
+    else:
+        print(f'service-worker.js: CACHE_NAME {name} (unchanged)')
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -1748,6 +1800,8 @@ def main():
         build_fuzzy_xref()
     elif cmd == 'semantic':
         build_semantic_xref()
+    elif cmd == 'sw':
+        pass  # sync_sw_cache_name() runs below for every command
     elif cmd == 'all':
         generate_registry()
         process_openai()
@@ -1764,6 +1818,10 @@ def main():
         print(f'Unknown command: {cmd}')
         print(__doc__)
         sys.exit(1)
+
+    # Every command that (re)writes datasets ends by re-deriving the SW cache
+    # name, so stale-cache bugs can't recur. No-op when nothing changed.
+    sync_sw_cache_name()
 
 
 if __name__ == '__main__':

@@ -1,4 +1,7 @@
-const CACHE_NAME = 'ew-cache-v11';
+// CACHE_NAME is auto-derived by `python3 scripts/preprocess.py sw` (and by every
+// other preprocess.py command) as a content hash of the URLS_TO_CACHE files below.
+// Don't hand-edit it; tests/data/sw-cache.test.js fails if it goes stale.
+const CACHE_NAME = 'ew-cache-9b6333d281f5';
 const URLS_TO_CACHE = [
   './',
   './index.html',

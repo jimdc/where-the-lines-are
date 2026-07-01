@@ -69,6 +69,8 @@ See [principles.md](principles.md) for the full design rationale with specific T
 
 Open `index.html` in a browser. Everything updates reactively — click a category, click a matrix cell, click a word, type a search, toggle a pill. No server required for the smaller datasets (works via `file://`), though `python3 -m http.server` is recommended to load BeaverTails (51MB). A service worker caches datasets after first load for offline use.
 
+**Cache busting is automatic.** The service worker's `CACHE_NAME` is a content hash of every file in `URLS_TO_CACHE`, derived by `scripts/preprocess.py` — every preprocess command ends by re-deriving it, so regenerating a dataset bumps the cache and a no-op regen doesn't. After hand-editing a precached UI file (`index.html`, `static/*`, `dataset-loader.js`), run `python3 scripts/preprocess.py sw`; `tests/data/sw-cache.test.js` (part of `npm test`) fails if `CACHE_NAME` is ever stale.
+
 ## File structure
 
 ```
