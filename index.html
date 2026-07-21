@@ -81,6 +81,18 @@
   <canvas id="consensusCanvas"></canvas>
 </div>
 
+<div id="coherenceSection" style="display:none;">
+  <h2>Category coherence</h2>
+  <p class="hint">Beyond labeling: how tightly each concept's prompts cluster in sentence-embedding space, independent of the category codes themselves (UMAP + HDBSCAN over <a href="https://arxiv.org/abs/1908.10084" target="_blank" rel="noopener">MiniLM</a> embeddings, computed offline). Top-cluster concentration is the share of a concept's prompts sitting in its single largest embedding cluster — a high number means the label points at one narrow kind of request; a low number means the label is an umbrella for many unrelated ones. Sorted ascending (most fragmented first).</p>
+  <div id="coherenceTable" class="table-responsive"></div>
+</div>
+
+<div id="outliersSection" style="display:none;">
+  <h2>Annotation outliers</h2>
+  <p class="hint">Labeled prompts whose 15 nearest embedding neighbors mostly carry a <em>different</em> concept than the label says — a sign the label may be wrong, or the prompt lost its context (e.g. one conversational turn sliced out of a longer exchange). Sorted ascending by neighbor agreement (least agreement first).</p>
+  <div id="outliersTable" class="table-responsive"></div>
+</div>
+
 <p class="hint">Click a category to focus on it. Click the matrix below to explore overlaps.</p>
 
 <h2>Pairwise co-occurrences</h2>
@@ -1378,7 +1390,14 @@ function switchDataset(id) {
     renderDatasetSelector(id);
     showLoading('Loading ' + entry.name + '...');
 
-    loadDataset(entry.file, entry.fileJs).then(function(data) {
+    Promise.all([
+        loadDataset(entry.file, entry.fileJs),
+        loadCoherence(id),
+        loadOutliers(id)
+    ]).then(function(results) {
+        var data = results[0];
+        var coherence = results[1];
+        var outliers = results[2];
         window.dataset = data;
         hideLoading();
 
@@ -1399,6 +1418,16 @@ function switchDataset(id) {
 
         // Consensus (cross-dataset agreement, conditional)
         renderConsensus(entry, data);
+
+        // Category coherence (offline UMAP+HDBSCAN concentration, conditional on precomputed data)
+        var coherenceSection = document.getElementById('coherenceSection');
+        renderCoherenceTable(document.getElementById('coherenceTable'), coherence);
+        coherenceSection.style.display = (coherence && coherence.concepts && coherence.concepts.length) ? '' : 'none';
+
+        // Annotation outliers (offline k-NN homogeneity ranking, conditional on precomputed data)
+        var outliersSection = document.getElementById('outliersSection');
+        renderOutliersTable(document.getElementById('outliersTable'), outliers);
+        outliersSection.style.display = (outliers && outliers.rows && outliers.rows.length) ? '' : 'none';
 
         // Hide xref panel on dataset switch
         document.getElementById('xrefPanel').style.display = 'none';

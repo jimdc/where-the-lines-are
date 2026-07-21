@@ -59,6 +59,13 @@ Moderation categories are not independent. The visualizations expose their hidde
 
 **Same prompt, different labels.** 6,640 prompts appear in two or more datasets. The Doppelganger feature marks these in the results table — click to see how each taxonomy classified the identical text. The Consensus chart summarizes concept-level agreement: hate and privacy get 60%+ agreement across datasets, while toxicity and harassment get 0% (concepts that only some datasets track).
 
+**Beyond labels: what embeddings see that categories don't.** Every statistic above lives in *label space* — it describes how categories relate to each other, never what the underlying text actually says. Two panels below the Consensus chart look at content directly, via offline sentence-embedding clustering (UMAP + HDBSCAN over [MiniLM](https://arxiv.org/abs/1908.10084), computed once per dataset, no ML at runtime):
+
+- **Category coherence** shows, per concept, what share of its prompts land in a single dominant embedding cluster. Narrow categories (trafficking, ransomware-specific cybercrime) cluster tightly; broad umbrella categories (cybercrime, harassment, fraud) turn out to cover many topically unrelated request types that just happen to share a taxonomy bucket — something a co-occurrence matrix cannot show, since it only ever looks at how labels relate to *each other*.
+- **Annotation outliers** ranks labeled prompts by how much their 15 nearest embedding neighbors *disagree* with their label — flagging likely mislabels and prompts that lost their context (e.g. a single conversational turn sliced out of a longer multi-turn exchange). It is an item-level, browsable signal that the aggregate Split-Verdict/Consensus charts structurally cannot produce, since those never look at content, only at label agreement rates.
+
+Both are clustered per dataset (each corpus gets its own embedding neighborhood, not one combined across all eight). BeaverTails (300K+ rows) is clustered from a stratified 50,000-row sample instead of the full corpus — rare categories kept in full, common ones thinned, the same shape of tradeoff already used elsewhere in this tool to keep things tractable on a laptop — and both panels say so when a dataset was sampled this way.
+
 ## Design
 
 The visualizations apply Tufte's principles throughout: high data-ink ratio, direct labeling, small multiples, data-text integration, grayscale palette, and zero external dependencies. Every chart is rendered in purpose-built canvas code with no frameworks. All visualizations adapt their sizing, font, and layout automatically for 6 to 23 categories. A single amber accent is the one departure from pure grayscale — reserved exclusively for marking taxonomy-only data (the absence of a labeled corpus), so the encoding itself signals "no measured data here."
@@ -90,11 +97,16 @@ datasets/
   airbench.json         5,694 rows (5 MB, AIR-Bench 2024 L2 rollup)
   ailuminate.json       1,200 rows (0.3 MB, AILuminate v1.0 DEMO)
   harmbench.json        400 rows (0.1 MB, HarmBench behaviors, single-label)
+  xref-semantic.json    Embedding (semantic) cross-dataset matches
+  <id>-coherence.json   Per concept: top-cluster concentration + example prompts
+  <id>-outliers.json    Top ~200 least-homogeneous labeled prompts, ranked
   *.js                  JS wrappers for file:// protocol
                         (Anthropic Constitutional Classifiers is taxonomy-only —
                          it lives in registry.json with rows:null, no data file.)
 scripts/
-  preprocess.py         One-time HuggingFace/GitHub → JSON pipeline + stats + xref
+  preprocess.py         One-time HuggingFace/GitHub → JSON pipeline + stats + xref +
+                        embedding-clustering precompute (embed/cluster/noise-lens)
+  concepts.py           Rosetta concept-crosswalk loader shared by the clustering steps
 tests/
   unit/                 Pure-function unit tests (node --test)
   data/                 Independent data-validation for AIR-Bench, AILuminate,

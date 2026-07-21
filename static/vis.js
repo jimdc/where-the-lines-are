@@ -1262,6 +1262,171 @@ function renderCrossDatasetMatch(container, xrefEntry, registry, captionText) {
     });
 }
 
+/* ── 13b. Category coherence (Table) ──
+ * Offline UMAP+HDBSCAN clustering, independent of the category labels
+ * themselves. One row per Rosetta concept: the % of that concept's prompts
+ * (in this dataset) sitting in the single largest embedding cluster, plus
+ * example prompts from that cluster. Precomputed by scripts/preprocess.py
+ * (embed/cluster subcommands); ships as static datasets/<id>-coherence.json.
+ */
+/* Disclosure note for datasets too large to cluster at full resolution on a
+ * laptop (currently just BeaverTails, 300K+ rows) -- both the coherence and
+ * outliers panels are computed from a stratified subsample instead, and say so. */
+function subsampleNote(subsampled) {
+    var p = document.createElement('p');
+    p.className = 'muted';
+    p.style.cssText = 'font-size:0.8em;margin-bottom:0.4rem;';
+    p.textContent = 'Computed from a stratified sample of ' + subsampled.n.toLocaleString() +
+        ' of ' + subsampled.totalRows.toLocaleString() +
+        ' rows (rare categories kept in full; common ones thinned) -- full-resolution clustering ' +
+        'at this row count is not tractable on a laptop.';
+    return p;
+}
+
+function renderCoherenceTable(container, coherence) {
+    container.innerHTML = '';
+    if (!coherence || !coherence.concepts || !coherence.concepts.length) return;
+
+    if (coherence.subsampled) {
+        container.appendChild(subsampleNote(coherence.subsampled));
+    }
+
+    var table = document.createElement('table');
+    table.className = 'coherence-table';
+
+    var thead = document.createElement('thead');
+    var headerRow = document.createElement('tr');
+    ['Concept', 'n', 'Top-cluster concentration', 'Example prompts'].forEach(function(label) {
+        var th = document.createElement('th');
+        th.textContent = label;
+        headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    var tbody = document.createElement('tbody');
+    coherence.concepts.forEach(function(c) {
+        var tr = document.createElement('tr');
+
+        var tdConcept = document.createElement('td');
+        tdConcept.className = 'rosetta-concept';
+        tdConcept.textContent = c.concept;
+        tr.appendChild(tdConcept);
+
+        var tdN = document.createElement('td');
+        tdN.textContent = c.n.toLocaleString();
+        tr.appendChild(tdN);
+
+        var tdConc = document.createElement('td');
+        tdConc.className = 'surprise-cell';
+        var pct = Math.round(c.topClusterConcentration * 100);
+        var bar = document.createElement('span');
+        bar.className = 'surprise-bar';
+        bar.style.width = Math.round(c.topClusterConcentration * 40) + 'px';
+        tdConc.appendChild(bar);
+        var pctLabel = document.createElement('span');
+        pctLabel.className = 'surprise-label';
+        pctLabel.textContent = pct + '% of ' + c.n.toLocaleString();
+        tdConc.appendChild(pctLabel);
+        tr.appendChild(tdConc);
+
+        var tdEx = document.createElement('td');
+        tdEx.className = 'cat-cell';
+        if (c.examples && c.examples.length) {
+            c.examples.forEach(function(ex) {
+                var q = document.createElement('span');
+                q.className = 'concept-examples';
+                q.textContent = '“' + ex + '”';
+                tdEx.appendChild(q);
+            });
+        } else {
+            tdEx.className = 'rosetta-empty';
+            tdEx.textContent = '—';
+        }
+        tr.appendChild(tdEx);
+
+        tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    container.appendChild(table);
+}
+
+/* ── 13c. Annotation outliers (Table) ──
+ * For each labeled prompt, the fraction of its 15 nearest embedding neighbors
+ * that share at least one Rosetta concept ("homogeneity") -- an item-level
+ * signal the label-space Consensus/Split-Verdict charts above cannot produce,
+ * since those only ever look at label co-occurrence, never at content.
+ * Precomputed by scripts/preprocess.py (noise-lens subcommand); ships as
+ * static datasets/<id>-outliers.json, sorted ascending (least agreement first).
+ */
+function renderOutliersTable(container, outliers) {
+    container.innerHTML = '';
+    if (!outliers || !outliers.rows || !outliers.rows.length) return;
+
+    if (outliers.subsampled) {
+        container.appendChild(subsampleNote(outliers.subsampled));
+    }
+
+    var table = document.createElement('table');
+    table.className = 'outliers-table';
+
+    var thead = document.createElement('thead');
+    var headerRow = document.createElement('tr');
+    ['Prompt excerpt', 'Label(s)', 'Neighbors’ concepts', 'Homogeneity'].forEach(function(label) {
+        var th = document.createElement('th');
+        th.textContent = label;
+        headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    var tbody = document.createElement('tbody');
+    outliers.rows.forEach(function(r) {
+        var tr = document.createElement('tr');
+
+        var tdExcerpt = document.createElement('td');
+        tdExcerpt.textContent = r.excerpt;
+        tr.appendChild(tdExcerpt);
+
+        var tdLabels = document.createElement('td');
+        tdLabels.className = 'cat-cell';
+        (r.labels || []).forEach(function(l) {
+            var pill = document.createElement('span');
+            pill.className = 'pill-sm';
+            pill.textContent = l;
+            tdLabels.appendChild(pill);
+        });
+        tr.appendChild(tdLabels);
+
+        var tdNeighbors = document.createElement('td');
+        tdNeighbors.className = 'cat-cell';
+        (r.neighborConcepts || []).forEach(function(nc) {
+            var pill = document.createElement('span');
+            pill.className = 'pill-sm';
+            pill.textContent = nc[0] + ' (' + nc[1] + ')';
+            tdNeighbors.appendChild(pill);
+        });
+        tr.appendChild(tdNeighbors);
+
+        var tdHomog = document.createElement('td');
+        tdHomog.className = 'surprise-cell';
+        var pct = Math.round(r.homogeneity * 100);
+        var bar = document.createElement('span');
+        bar.className = 'surprise-bar';
+        bar.style.width = Math.round(r.homogeneity * 40) + 'px';
+        tdHomog.appendChild(bar);
+        var pctLabel = document.createElement('span');
+        pctLabel.className = 'surprise-label';
+        pctLabel.textContent = pct + '%';
+        tdHomog.appendChild(pctLabel);
+        tr.appendChild(tdHomog);
+
+        tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    container.appendChild(table);
+}
+
 /* ── 13. Consensus: Agreement Summary (Canvas) ── */
 
 function drawAgreementSummary(canvas, data, namesFn) {

@@ -121,6 +121,66 @@ function loadSemanticXref() {
     });
 }
 
+function loadCoherence(datasetId) {
+    return new Promise(function(resolve, reject) {
+        if (location.protocol === 'file:') {
+            var varName = 'dataset_' + datasetId + '_coherence';
+            var script = document.createElement('script');
+            script.src = 'datasets/' + datasetId + '-coherence.js';
+            script.onload = function() {
+                if (typeof window[varName] !== 'undefined') {
+                    resolve(window[varName]);
+                } else {
+                    reject(new Error(script.src + ' loaded but ' + varName + ' not defined'));
+                }
+            };
+            script.onerror = function() {
+                // coherence data is optional (not every dataset has been clustered) -- resolve null if missing
+                resolve(null);
+            };
+            document.head.appendChild(script);
+        } else {
+            fetch('datasets/' + datasetId + '-coherence.json')
+                .then(function(r) {
+                    if (!r.ok) return null;
+                    return r.json();
+                })
+                .then(resolve)
+                .catch(function() { resolve(null); });
+        }
+    });
+}
+
+function loadOutliers(datasetId) {
+    return new Promise(function(resolve, reject) {
+        if (location.protocol === 'file:') {
+            var varName = 'dataset_' + datasetId + '_outliers';
+            var script = document.createElement('script');
+            script.src = 'datasets/' + datasetId + '-outliers.js';
+            script.onload = function() {
+                if (typeof window[varName] !== 'undefined') {
+                    resolve(window[varName]);
+                } else {
+                    reject(new Error(script.src + ' loaded but ' + varName + ' not defined'));
+                }
+            };
+            script.onerror = function() {
+                // outliers data is optional (not every dataset has been clustered) -- resolve null if missing
+                resolve(null);
+            };
+            document.head.appendChild(script);
+        } else {
+            fetch('datasets/' + datasetId + '-outliers.json')
+                .then(function(r) {
+                    if (!r.ok) return null;
+                    return r.json();
+                })
+                .then(resolve)
+                .catch(function() { resolve(null); });
+        }
+    });
+}
+
 function loadDataset(jsonPath, jsPath) {
     return new Promise(function(resolve, reject) {
         if (location.protocol === 'file:') {
