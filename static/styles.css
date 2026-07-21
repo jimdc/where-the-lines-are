@@ -558,6 +558,31 @@ mark {
 /* ── Consensus Section ── */
 #consensusSection { margin: 0.5rem 0 1rem; }
 
+/* ── Category coherence / Annotation outliers tables ──
+ * Same pattern as .rosetta-table: table-layout:auto with short columns kept to
+ * a single line, wrapped in .table-responsive so a narrow viewport scrolls the
+ * table horizontally instead of forcing single-word headers ("Concept", "n")
+ * to wrap into a cramped multi-line stack. */
+#coherenceSection, #outliersSection { margin: 0.5rem 0 1rem; }
+
+.coherence-table, .outliers-table {
+    table-layout: auto;
+    width: auto;
+    min-width: 100%;
+}
+.coherence-table th, .outliers-table th { white-space: nowrap; }
+.coherence-table td:nth-child(1), .coherence-table td:nth-child(2),
+.outliers-table td:nth-child(4) { white-space: nowrap; }
+.coherence-table td:nth-child(4), .outliers-table td:nth-child(1),
+.outliers-table td:nth-child(2), .outliers-table td:nth-child(3) {
+    white-space: normal;
+}
+.coherence-table td:nth-child(4) { min-width: 260px; }
+.outliers-table td:nth-child(1) { min-width: 260px; }
+.coherence-table .concept-examples { font-size: 0.92em; color: #555; }
+.coherence-table .concept-examples + .concept-examples { display: block; margin-top: 0.2rem; }
+.outliers-table td:nth-child(2), .outliers-table td:nth-child(3) { vertical-align: top; }
+
 /* ── Responsive ── */
 @media (max-width: 700px) {
     #wordRow {

@@ -18,14 +18,47 @@ Usage:
     python scripts/preprocess.py xref          # build cross-dataset prompt index
     python scripts/preprocess.py fuzzy         # build fuzzy cross-dataset matching
     python scripts/preprocess.py semantic      # build embedding (semantic) cross-dataset matching
+    python scripts/preprocess.py embed         # embed full corpus for clustering (local cache only)
+    python scripts/preprocess.py cluster-per-dataset  # UMAP+HDBSCAN per dataset -> datasets/<id>-coherence.json
+                                                       # (use this one -- see note below)
+    python scripts/preprocess.py cluster       # UMAP+HDBSCAN on the full corpus combined -- kept for
+                                                # reference only; at ~410K rows its UMAP step alone ran
+                                                # 3.5+ hours without finishing, so cluster-per-dataset
+                                                # (independent per-dataset passes, BeaverTails stratified
+                                                # to ~50K rows) is what actually ships
+    python scripts/preprocess.py noise-lens    # k-NN homogeneity -> datasets/<id>-outliers.json
+    python scripts/preprocess.py sw            # re-derive service-worker CACHE_NAME (content hash)
     python scripts/preprocess.py all           # run all of the above
+
+Every command finishes by re-deriving the service-worker CACHE_NAME from a
+content hash of the precached assets, so regenerated datasets (or edited UI
+files) automatically bust the offline cache. A no-op regen leaves it unchanged.
 """
 
+import hashlib
 import json
 import os
+import re
 import sys
+from collections import Counter
+
+import concepts
 
 DATASETS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'datasets')
+SW_PATH = os.path.join(os.path.dirname(DATASETS_DIR), 'service-worker.js')
+CLUSTER_CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.cache', 'clustering')
+
+# Embedding-clustering pipeline params (see docs/architecture.md for the method
+# writeup): same model + normalize-and-cosine recipe as build_semantic_xref, so
+# these numbers are comparable to what's already in production.
+CLUSTER_MODEL_NAME = 'sentence-transformers/all-MiniLM-L6-v2'
+CLUSTER_K = 15
+CLUSTER_MIN_CLUSTER_SIZE = 40
+CLUSTER_MIN_SAMPLES = 10
+CLUSTER_UMAP_DIM = 50
+CLUSTER_TEXT_TRUNC = 200
+CLUSTER_MIN_TEXT_LEN = 10
+CLUSTER_OUTLIER_TOP_N = 200
 
 # AIR-Bench 2024 (stanford-crfm/air-bench-2024) Level-2 taxonomy: 16 categories.
 # Order/names are verbatim from the dataset's `l2-name` column. Each maps to a
@@ -115,6 +148,19 @@ def write_json_and_js(dataset_id, data):
         f.write(';\n')
 
     print(f'  Done: {dataset_id}')
+
+
+def write_named_json_and_js(path_stub, var_name, data):
+    """Like write_json_and_js, but for artifacts that aren't a whole dataset
+    (e.g. per-dataset derived files) and so need a caller-chosen variable name."""
+    json_path = path_stub + '.json'
+    js_path = path_stub + '.js'
+    with open(json_path, 'w') as f:
+        json.dump(data, f, separators=(',', ':'))
+    with open(js_path, 'w') as f:
+        f.write(f'var {var_name} = ')
+        json.dump(data, f, separators=(',', ':'))
+        f.write(';\n')
 
 
 def process_openai():
@@ -1714,6 +1760,515 @@ def build_semantic_xref():
     print(f'  Wrote {js_path}')
 
 
+def _iter_cluster_rows(registry):
+    """Yield (dataset_id, row_index, disp_text, flagged_keys) for every eligible
+    row across all row-bearing datasets (taxonomy-only layers have no corpus).
+    Same eligibility rule as build_semantic_xref (min 10 chars, truncate to the
+    200-char display window) minus the "must be flagged" filter -- unflagged
+    rows are kept too, since they provide context mass the clustering needs:
+    short, generic unflagged/short rows tend to form their own low-purity
+    cluster, which is itself a finding worth surfacing rather than filtering out.
+    """
+    for ds_entry in registry['datasets']:
+        if ds_entry.get('taxonomyOnly'):
+            continue
+        ds_id = ds_entry['id']
+        json_path = os.path.join(DATASETS_DIR, f'{ds_id}.json')
+        if not os.path.exists(json_path):
+            continue
+        text_field = ds_entry.get('textField', 'prompt')
+        keys = [c['key'] for c in ds_entry.get('categories', [])]
+        with open(json_path) as f:
+            data = json.load(f)
+        for i, row in enumerate(data):
+            text = row.get(text_field, '')
+            if not text or len(text.strip()) < CLUSTER_MIN_TEXT_LEN:
+                continue
+            disp = text.strip()[:CLUSTER_TEXT_TRUNC]
+            flagged = [k for k in keys if row.get(k, 0) == 1]
+            yield ds_id, i, disp, flagged
+
+
+def build_cluster_embeddings():
+    """Step 1 (embed): embed every eligible row across the full corpus with the
+    same model + normalize-and-cosine recipe as build_semantic_xref, and cache
+    the embeddings + row metadata locally under scripts/.cache/ (gitignored).
+    Local-only, no cloud calls -- the corpus is flagged-harmful text. Nothing
+    here is shipped; only the derived coherence/outliers JSON from the later
+    `cluster`/`noise-lens` steps crosses into datasets/ (narrow waist, the same
+    rule build_semantic_xref already follows).
+    """
+    try:
+        import numpy as np
+        from sentence_transformers import SentenceTransformer
+    except ImportError as exc:
+        print('  clustering needs numpy + sentence-transformers (optional dep).')
+        print(f'    (missing module: {getattr(exc, "name", exc)})')
+        return
+    import time
+
+    os.makedirs(CLUSTER_CACHE_DIR, exist_ok=True)
+    registry = concepts.load_registry()
+
+    print('Collecting eligible rows for embedding...')
+    rows_meta = []
+    texts = []
+    for ds_id, idx, disp, flagged in _iter_cluster_rows(registry):
+        rows_meta.append({'dataset': ds_id, 'index': idx, 'text': disp, 'cats': flagged})
+        texts.append(disp)
+    print(f'  {len(texts)} eligible rows across the corpus')
+
+    print(f'  Embedding with {CLUSTER_MODEL_NAME} (normalized -> cosine = dot)...')
+    t0 = time.time()
+    model = SentenceTransformer(CLUSTER_MODEL_NAME)
+    emb = model.encode(
+        texts, batch_size=128, normalize_embeddings=True, show_progress_bar=True
+    ).astype(np.float32)
+    dt = time.time() - t0
+    print(f'  Embedded {emb.shape[0]} rows in {dt:.1f}s ({emb.shape[0] / max(dt, 0.001):.0f} rows/sec)')
+
+    np.save(os.path.join(CLUSTER_CACHE_DIR, 'embeddings.npy'), emb)
+    with open(os.path.join(CLUSTER_CACHE_DIR, 'rows_meta.jsonl'), 'w') as f:
+        for m in rows_meta:
+            f.write(json.dumps(m) + '\n')
+    print(f'  Cached embeddings + metadata to {CLUSTER_CACHE_DIR} (local only, not shipped)')
+
+
+def build_cluster_and_coherence():
+    """Step 2+3 (cluster): approximate k=15 nearest neighbors via UMAP's own
+    NN-descent -- NOT a second exact O(n^2) matmul pass, which measured at
+    ~66s for 50,775 rows in an earlier prototype and projects to ~70 min at
+    the full ~410K-row corpus. UMAP-reduce to 50d (direct HDBSCAN on 384-dim embeddings
+    stalls -- a known high-dimensional tree-search failure mode), then
+    HDBSCAN(min_cluster_size=40, min_samples=10). Writes
+    datasets/<id>-coherence.json: per Rosetta concept, the % of that concept's
+    rows (in this dataset) sitting in the single largest embedding cluster,
+    plus 1-2 example prompts from that cluster.
+    """
+    try:
+        import numpy as np
+        import umap
+        import hdbscan
+    except ImportError as exc:
+        print('  clustering needs numpy + umap-learn + hdbscan (optional deps).')
+        print(f'    (missing module: {getattr(exc, "name", exc)})')
+        return
+    import time
+
+    emb_path = os.path.join(CLUSTER_CACHE_DIR, 'embeddings.npy')
+    meta_path = os.path.join(CLUSTER_CACHE_DIR, 'rows_meta.jsonl')
+    if not os.path.exists(emb_path) or not os.path.exists(meta_path):
+        print('  No cached embeddings found -- run `embed` first.')
+        return
+
+    emb = np.load(emb_path)
+    rows_meta = []
+    with open(meta_path) as f:
+        for line in f:
+            rows_meta.append(json.loads(line))
+    print(f'  Loaded {emb.shape[0]} cached embeddings')
+
+    print(f'  Approximate {CLUSTER_K}-NN graph (UMAP NN-descent, cosine)...')
+    t0 = time.time()
+    knn_indices, knn_dists, search_index = umap.umap_.nearest_neighbors(
+        emb, CLUSTER_K, 'cosine', {}, False, 42,
+        low_memory=True, use_pynndescent=True, n_jobs=1, verbose=True)
+    print(f'    {time.time() - t0:.1f}s')
+
+    print(f'  UMAP-reduce to {CLUSTER_UMAP_DIM}d (reusing the k-NN graph above)...')
+    t0 = time.time()
+    reducer = umap.UMAP(
+        n_components=CLUSTER_UMAP_DIM, n_neighbors=CLUSTER_K, min_dist=0.0, metric='cosine',
+        precomputed_knn=(knn_indices, knn_dists, search_index),
+        random_state=42, low_memory=True, n_jobs=1, verbose=True)
+    emb50 = reducer.fit_transform(emb)
+    print(f'    {time.time() - t0:.1f}s')
+
+    print(f'  HDBSCAN(min_cluster_size={CLUSTER_MIN_CLUSTER_SIZE}, min_samples={CLUSTER_MIN_SAMPLES})...')
+    t0 = time.time()
+    clusterer = hdbscan.HDBSCAN(min_cluster_size=CLUSTER_MIN_CLUSTER_SIZE, min_samples=CLUSTER_MIN_SAMPLES)
+    labels = clusterer.fit_predict(emb50)
+    n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
+    noise = int((labels == -1).sum())
+    print(f'    {time.time() - t0:.1f}s -- {n_clusters} clusters, '
+          f'{noise} noise ({100 * noise / len(labels):.1f}%)')
+
+    # Cached for noise-lens, which reuses this exact k-NN graph.
+    np.save(os.path.join(CLUSTER_CACHE_DIR, 'knn_indices.npy'), knn_indices)
+    np.save(os.path.join(CLUSTER_CACHE_DIR, 'labels.npy'), labels)
+
+    registry = concepts.load_registry()
+    cat_concepts = concepts.category_concepts(registry)
+
+    for ds_entry in registry['datasets']:
+        if ds_entry.get('taxonomyOnly'):
+            continue
+        ds_id = ds_entry['id']
+        _write_coherence_json(ds_id, rows_meta, cat_concepts, labels, CLUSTER_UMAP_DIM)
+
+
+def _write_coherence_json(ds_id, rows_meta, cat_concepts, labels, umap_dim,
+                           subsampled=None, eligible_idxs=None):
+    """Shared by the combined-corpus and per-dataset cluster paths: given a
+    global row-index -> HDBSCAN cluster label array/mapping, compute per-concept
+    top-cluster concentration for one dataset and write datasets/<id>-coherence.json.
+
+    `eligible_idxs`, if given, restricts to the rows actually clustered (a
+    stratified subsample for datasets too large to cluster at full resolution
+    on a laptop); `subsampled` is the {n, totalRows} note shipped alongside so
+    the client can disclose it."""
+    ds_cat_concepts = cat_concepts.get(ds_id, {})
+
+    # concept -> [global row index, ...] restricted to this dataset's (eligible) rows
+    concept_rows = {}
+    for gi, m in enumerate(rows_meta):
+        if m['dataset'] != ds_id:
+            continue
+        if eligible_idxs is not None and gi not in eligible_idxs:
+            continue
+        for c in concepts.row_concepts(m['cats'], ds_cat_concepts):
+            concept_rows.setdefault(c, []).append(gi)
+
+    if not concept_rows:
+        return
+
+    concept_entries = []
+    for concept, gidxs in concept_rows.items():
+        cluster_ids = [int(labels[gi]) for gi in gidxs]
+        n = len(gidxs)
+        noise_n = sum(1 for c in cluster_ids if c == -1)
+        named = [c for c in cluster_ids if c != -1]
+        top_cluster, top_count = (Counter(named).most_common(1)[0] if named else (None, 0))
+        examples = []
+        if top_cluster is not None:
+            for gi, cid in zip(gidxs, cluster_ids):
+                if cid == top_cluster:
+                    examples.append(rows_meta[gi]['text'][:180])
+                if len(examples) >= 2:
+                    break
+        concept_entries.append({
+            'concept': concept,
+            'n': n,
+            'topClusterConcentration': round(top_count / n, 3) if n else 0.0,
+            'topClusterSize': top_count,
+            'noiseRate': round(noise_n / n, 3) if n else 0.0,
+            'examples': examples,
+        })
+
+    concept_entries.sort(key=lambda e: e['topClusterConcentration'])
+
+    out = {
+        'datasetId': ds_id,
+        'clusterParams': {
+            'k': CLUSTER_K,
+            'minClusterSize': CLUSTER_MIN_CLUSTER_SIZE,
+            'minSamples': CLUSTER_MIN_SAMPLES,
+            'umapDim': umap_dim,
+        },
+        'concepts': concept_entries,
+    }
+    if subsampled:
+        out['subsampled'] = subsampled
+    stub = os.path.join(DATASETS_DIR, f'{ds_id}-coherence')
+    write_named_json_and_js(stub, f'dataset_{ds_id}_coherence', out)
+    size_kb = os.path.getsize(stub + '.json') / 1024
+    print(f'  {ds_id}: {len(concept_entries)} concepts -> {stub}.json ({size_kb:.1f} KB)')
+
+
+def _stratified_subsample(global_idxs, rows_meta, target_n, rare_cap, seed=42):
+    """Stratified subsample of a dataset's global row indices: categories at or
+    under `rare_cap` rows are kept in full, so they survive subsampling intact
+    (mirroring the same stratification approach used to size down PKU-SafeRLHF
+    for local prototyping). Categories ABOVE the cap get no guaranteed
+    allocation here -- capping them at the same flat number as genuinely rare
+    categories would inflate common categories far past their true population
+    share (e.g. a category that is 25% of the corpus ending up at 40%+ of the
+    sample). They're left to the uniform random fill below instead, which
+    lands them close to their real frequency. Deterministic given `seed`.
+    """
+    import random
+    rng = random.Random(seed)
+
+    by_cat = {}
+    for gi in global_idxs:
+        for k in rows_meta[gi]['cats']:
+            by_cat.setdefault(k, []).append(gi)
+
+    selected = set()
+    for cat, rows in by_cat.items():
+        if len(rows) <= rare_cap:
+            selected.update(rows)
+
+    if len(selected) < target_n:
+        remaining = [gi for gi in global_idxs if gi not in selected]
+        rng.shuffle(remaining)
+        selected.update(remaining[:target_n - len(selected)])
+
+    selected = list(selected)
+    rng.shuffle(selected)  # avoid a low-global-index bias if the cap phase overshot target_n
+    return sorted(selected[:max(target_n, 1)])
+
+
+def build_cluster_and_coherence_per_dataset():
+    """Per-dataset fallback for step 2+3, used when the combined ~410K-row
+    UMAP+HDBSCAN pass is intractably slow (HDBSCAN's Boruvka MST construction
+    does not scale linearly, and degrades further in higher dimensions -- the
+    same curse-of-dimensionality failure mode that made direct 384-dim HDBSCAN
+    stall, recurring at 50d when the row count grows 8x). Clusters each
+    dataset's rows independently: its own approximate k-NN graph, its own
+    UMAP reduction (to a lower, more tree-friendly dimensionality), its own
+    HDBSCAN pass. The coherence artifact is per-dataset anyway, so this loses
+    only the cross-dataset "same concept, different dataset" seam signal, not
+    anything the shipped panel needs. Reuses the cached embeddings (no
+    re-embedding); assembles a combined knn_indices.npy across all datasets
+    (global row indices) so noise-lens runs unchanged afterward.
+    """
+    try:
+        import numpy as np
+        import umap
+        import hdbscan
+    except ImportError as exc:
+        print('  clustering needs numpy + umap-learn + hdbscan (optional deps).')
+        print(f'    (missing module: {getattr(exc, "name", exc)})')
+        return
+    import time
+
+    PER_DATASET_UMAP_DIM = 15  # lower than the combined pass -- tree-friendly at up to ~300K rows
+    SUBSAMPLE_THRESHOLD = 60000  # datasets larger than this get a stratified subsample below
+    SUBSAMPLE_TARGET = 50000
+    SUBSAMPLE_RARE_CAP = 4000    # per-category cap while keeping rare categories in full
+
+    emb_path = os.path.join(CLUSTER_CACHE_DIR, 'embeddings.npy')
+    meta_path = os.path.join(CLUSTER_CACHE_DIR, 'rows_meta.jsonl')
+    if not os.path.exists(emb_path) or not os.path.exists(meta_path):
+        print('  No cached embeddings found -- run `embed` first.')
+        return
+
+    emb = np.load(emb_path)
+    rows_meta = []
+    with open(meta_path) as f:
+        for line in f:
+            rows_meta.append(json.loads(line))
+    print(f'  Loaded {emb.shape[0]} cached embeddings')
+
+    registry = concepts.load_registry()
+    cat_concepts = concepts.category_concepts(registry)
+
+    by_dataset_global_idx = {}
+    for gi, m in enumerate(rows_meta):
+        by_dataset_global_idx.setdefault(m['dataset'], []).append(gi)
+
+    knn_indices_full = np.zeros((len(rows_meta), CLUSTER_K), dtype=np.int32)
+    eligible = np.zeros(len(rows_meta), dtype=bool)
+
+    for ds_entry in registry['datasets']:
+        if ds_entry.get('taxonomyOnly'):
+            continue
+        ds_id = ds_entry['id']
+        global_idxs = by_dataset_global_idx.get(ds_id)
+        if not global_idxs:
+            continue
+
+        subsampled = None
+        if len(global_idxs) > SUBSAMPLE_THRESHOLD:
+            total = len(global_idxs)
+            global_idxs = _stratified_subsample(
+                global_idxs, rows_meta, SUBSAMPLE_TARGET, SUBSAMPLE_RARE_CAP)
+            subsampled = {'n': len(global_idxs), 'totalRows': total}
+            print(f'  {ds_id}: {total} rows -> stratified subsample of {len(global_idxs)} '
+                  f'(UMAP does not scale to this row count on a laptop; rare categories kept in full)')
+
+        global_idxs = np.array(global_idxs, dtype=np.int64)
+        emb_ds = emb[global_idxs]
+        n_ds = emb_ds.shape[0]
+        print(f'  {ds_id}: clustering {n_ds} rows')
+
+        t0 = time.time()
+        knn_local, knn_dists, search_index = umap.umap_.nearest_neighbors(
+            emb_ds, CLUSTER_K, 'cosine', {}, False, 42,
+            low_memory=True, use_pynndescent=True, n_jobs=1, verbose=False)
+        knn_indices_full[global_idxs] = global_idxs[knn_local]
+        eligible[global_idxs] = True
+        print(f'    k-NN: {time.time() - t0:.1f}s')
+
+        t0 = time.time()
+        reducer = umap.UMAP(
+            n_components=min(PER_DATASET_UMAP_DIM, max(2, n_ds - 2)), n_neighbors=CLUSTER_K,
+            min_dist=0.0, metric='cosine', precomputed_knn=(knn_local, knn_dists, search_index),
+            random_state=42, low_memory=True, n_jobs=1, verbose=False)
+        emb_reduced = reducer.fit_transform(emb_ds)
+        print(f'    UMAP-{PER_DATASET_UMAP_DIM}d: {time.time() - t0:.1f}s')
+
+        t0 = time.time()
+        clusterer = hdbscan.HDBSCAN(min_cluster_size=CLUSTER_MIN_CLUSTER_SIZE, min_samples=CLUSTER_MIN_SAMPLES)
+        local_labels = clusterer.fit_predict(emb_reduced)
+        n_clusters = len(set(local_labels)) - (1 if -1 in local_labels else 0)
+        noise = int((local_labels == -1).sum())
+        print(f'    HDBSCAN: {time.time() - t0:.1f}s -- {n_clusters} clusters, '
+              f'{noise} noise ({100 * noise / len(local_labels):.1f}%)')
+
+        global_labels = {int(gi): int(lbl) for gi, lbl in zip(global_idxs, local_labels)}
+        _write_coherence_json(ds_id, rows_meta, cat_concepts, global_labels, PER_DATASET_UMAP_DIM,
+                               subsampled=subsampled, eligible_idxs=set(global_idxs.tolist()))
+
+    np.save(os.path.join(CLUSTER_CACHE_DIR, 'knn_indices.npy'), knn_indices_full)
+    np.save(os.path.join(CLUSTER_CACHE_DIR, 'eligible.npy'), eligible)
+    print(f'  Wrote combined knn_indices.npy ({knn_indices_full.shape}) + eligible.npy for noise-lens')
+
+
+def build_outliers():
+    """Step 4 (noise-lens): per labeled row, the fraction of its k=15 nearest
+    embedding neighbors (from the cached approximate k-NN graph) that share at
+    least one Rosetta concept -- "homogeneity". Writes
+    datasets/<id>-outliers.json: the ~200 least-homogeneous labeled prompts per
+    dataset, sorted ascending (least homogeneous first). Rows whose ONLY
+    concept is the 'other' catch-all are excluded from the ranked list --
+    Aegis's "needs caution"/"other" catch-all is not a real semantic category,
+    so of course a k-NN neighbor in a different concept "disagrees" with it --
+    but still count as neighbors for everyone else's homogeneity.
+    """
+    try:
+        import numpy as np
+    except ImportError as exc:
+        print('  clustering needs numpy (optional dep).')
+        print(f'    (missing module: {getattr(exc, "name", exc)})')
+        return
+
+    knn_path = os.path.join(CLUSTER_CACHE_DIR, 'knn_indices.npy')
+    meta_path = os.path.join(CLUSTER_CACHE_DIR, 'rows_meta.jsonl')
+    if not os.path.exists(knn_path) or not os.path.exists(meta_path):
+        print('  No cached k-NN graph found -- run `embed` then `cluster` first.')
+        return
+
+    knn_indices = np.load(knn_path)
+    rows_meta = []
+    with open(meta_path) as f:
+        for line in f:
+            rows_meta.append(json.loads(line))
+    n = len(rows_meta)
+    print(f'  Loaded k-NN graph for {n} rows')
+
+    # Rows outside a cluster step's coverage (e.g. not in a stratified subsample
+    # taken for a dataset too large to cluster at full resolution) have no real
+    # k-NN entries -- eligible.npy marks which rows actually got one.
+    eligible_path = os.path.join(CLUSTER_CACHE_DIR, 'eligible.npy')
+    eligible = np.load(eligible_path) if os.path.exists(eligible_path) else np.ones(n, dtype=bool)
+
+    registry = concepts.load_registry()
+    cat_concepts = concepts.category_concepts(registry)
+
+    row_concept_sets = [
+        concepts.row_concepts(m['cats'], cat_concepts.get(m['dataset'], {}))
+        for m in rows_meta
+    ]
+
+    print('  Computing per-row homogeneity...')
+    homogeneity = [None] * n
+    for i in range(n):
+        if not eligible[i]:
+            continue
+        my_concepts = row_concept_sets[i]
+        if not my_concepts:
+            continue  # unflagged rows aren't ranked, but still serve as neighbors
+        agree = sum(1 for j in knn_indices[i] if row_concept_sets[j] & my_concepts)
+        homogeneity[i] = agree / len(knn_indices[i])
+
+    by_dataset = {}
+    for i, m in enumerate(rows_meta):
+        if homogeneity[i] is None:
+            continue
+        if row_concept_sets[i] == {'other'}:
+            continue  # catch-all-only rows inflate disagreement by construction
+        by_dataset.setdefault(m['dataset'], []).append(i)
+
+    # Per-dataset subsample notes (if datasets/<id>-coherence.json says it was
+    # subsampled, the outliers list is scoped to that same sample).
+    subsampled_by_ds = {}
+    for ds_entry in registry['datasets']:
+        coh_path = os.path.join(DATASETS_DIR, f'{ds_entry["id"]}-coherence.json')
+        if os.path.exists(coh_path):
+            with open(coh_path) as f:
+                coh = json.load(f)
+            if coh.get('subsampled'):
+                subsampled_by_ds[ds_entry['id']] = coh['subsampled']
+
+    for ds_entry in registry['datasets']:
+        ds_id = ds_entry['id']
+        idxs = by_dataset.get(ds_id)
+        if not idxs:
+            continue
+        idxs.sort(key=lambda i: homogeneity[i])
+        top = idxs[:CLUSTER_OUTLIER_TOP_N]
+
+        cat_short = {c['key']: c.get('short', c['name']) for c in ds_entry.get('categories', [])}
+
+        rows_out = []
+        for i in top:
+            m = rows_meta[i]
+            neighbor_concepts = Counter()
+            for j in knn_indices[i]:
+                for c in row_concept_sets[j]:
+                    neighbor_concepts[c] += 1
+            rows_out.append({
+                'excerpt': m['text'][:180],
+                'labels': [cat_short.get(k, k) for k in m['cats']],
+                'neighborConcepts': [[c, cnt] for c, cnt in neighbor_concepts.most_common(3)],
+                'homogeneity': round(homogeneity[i], 3),
+            })
+
+        out = {'datasetId': ds_id, 'k': CLUSTER_K, 'rows': rows_out}
+        if ds_id in subsampled_by_ds:
+            out['subsampled'] = subsampled_by_ds[ds_id]
+        stub = os.path.join(DATASETS_DIR, f'{ds_id}-outliers')
+        write_named_json_and_js(stub, f'dataset_{ds_id}_outliers', out)
+        size_kb = os.path.getsize(stub + '.json') / 1024
+        print(f'  {ds_id}: {len(rows_out)} outliers -> {stub}.json ({size_kb:.1f} KB)')
+
+
+def sync_sw_cache_name():
+    """Derive the service-worker CACHE_NAME from a content hash of the precached assets.
+
+    Reads URLS_TO_CACHE out of service-worker.js (single source of truth),
+    hashes every referenced file (path + bytes, sorted, deduped), and rewrites
+    the CACHE_NAME assignment to 'ew-cache-<12-hex-digits>'. Any byte change
+    in a precached dataset or UI file yields a new name (cache bust on next SW
+    update); if nothing changed, the file is left untouched. Mirrored by
+    tests/data/sw-cache.test.js, which fails when CACHE_NAME is stale.
+    """
+    with open(SW_PATH, encoding='utf-8') as f:
+        sw = f.read()
+    m = re.search(r'const URLS_TO_CACHE = \[(.*?)\];', sw, re.S)
+    if not m:
+        raise RuntimeError('URLS_TO_CACHE array not found in service-worker.js')
+    urls = re.findall(r"'([^']+)'", m.group(1))
+    root = os.path.dirname(SW_PATH)
+    paths = sorted({
+        'index.html' if u in ('./', '.') else (u[2:] if u.startswith('./') else u)
+        for u in urls
+    })
+    h = hashlib.sha256()
+    for p in paths:
+        fp = os.path.join(root, p)
+        if not os.path.isfile(fp):
+            raise RuntimeError(f'service-worker precached file missing: {p}')
+        h.update(p.encode('utf-8'))
+        h.update(b'\0')
+        with open(fp, 'rb') as f:
+            h.update(f.read())
+        h.update(b'\0')
+    name = f'ew-cache-{h.hexdigest()[:12]}'
+    new_sw, n = re.subn(r"const CACHE_NAME = '[^']*';",
+                        f"const CACHE_NAME = '{name}';", sw, count=1)
+    if n != 1:
+        raise RuntimeError('CACHE_NAME assignment not found in service-worker.js')
+    if new_sw != sw:
+        with open(SW_PATH, 'w', encoding='utf-8') as f:
+            f.write(new_sw)
+        print(f'service-worker.js: CACHE_NAME -> {name} (bumped)')
+    else:
+        print(f'service-worker.js: CACHE_NAME {name} (unchanged)')
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -1748,6 +2303,16 @@ def main():
         build_fuzzy_xref()
     elif cmd == 'semantic':
         build_semantic_xref()
+    elif cmd == 'embed':
+        build_cluster_embeddings()
+    elif cmd == 'cluster':
+        build_cluster_and_coherence()
+    elif cmd == 'cluster-per-dataset':
+        build_cluster_and_coherence_per_dataset()
+    elif cmd == 'noise-lens':
+        build_outliers()
+    elif cmd == 'sw':
+        pass  # sync_sw_cache_name() runs below for every command
     elif cmd == 'all':
         generate_registry()
         process_openai()
@@ -1764,6 +2329,10 @@ def main():
         print(f'Unknown command: {cmd}')
         print(__doc__)
         sys.exit(1)
+
+    # Every command that (re)writes datasets ends by re-deriving the SW cache
+    # name, so stale-cache bugs can't recur. No-op when nothing changed.
+    sync_sw_cache_name()
 
 
 if __name__ == '__main__':

@@ -172,3 +172,8 @@ tasks/
 
 # Playwright MCP session artifacts (screenshots/snapshots/console logs)
 .playwright-mcp/
+
+# Local-only clustering precompute cache (embeddings, k-NN graph, cluster
+# labels) -- never shipped; only the derived datasets/<id>-{coherence,outliers}.json
+# artifacts cross into the tracked tree. Same narrow-waist rule as xref-semantic.
+scripts/.cache/
